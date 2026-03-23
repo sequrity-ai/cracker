@@ -1,0 +1,40 @@
+[project]
+name = "cracker"
+version = "0.1.0"
+description = "Automated prompt injection attack generator for OpenClaw Bench"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+dependencies = [
+    "pydantic>=2.0",
+    "click>=8.0",
+    "python-dotenv>=1.0",
+    "openai>=1.0",  # For OpenRouter API
+    "rich>=13.0",  # For pretty terminal output
+    "daytona-sdk>=0.1.0",  # For Daytona backend
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+cracker = "cracker.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
