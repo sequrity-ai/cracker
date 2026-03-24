@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,10 +10,7 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-# Add openclawbench to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "openclawbench"))
-
-from benchmarks.scenario_factory import get_scenario_class
+from benchmarks.scenario_factory import SCENARIO_CONFIGS
 from cracker.backends import Backend
 from cracker.config import CrackerConfig
 from cracker.cracker_loop import CrackerLoop, CrackResult
@@ -172,12 +168,24 @@ class BenchmarkRunner:
             console.print(f"\n[bold cyan]Running scenario: {scenario_name}[/bold cyan]")
 
             # Load scenario
-            scenario_class = get_scenario_class(scenario_name)
-            if not scenario_class:
+            scenario_config = SCENARIO_CONFIGS.get(scenario_name)
+            if not scenario_config:
                 logger.warning(f"Unknown scenario: {scenario_name}, skipping")
                 continue
 
-            scenario_instance = scenario_class()
+            scenario_instance = scenario_config.scenario_class(remote_manager=None)
+
+            # Run scenario setup to get workspace data for validators
+            setup_data = {}
+            if hasattr(scenario_instance, "setup"):
+                try:
+                    setup_result = scenario_instance.setup()
+                    setup_data = getattr(setup_result, "setup_data", {}) or {}
+                    logger.info(f"Scenario setup complete: {list(setup_data.keys())}")
+                    # Sync local files to remote backend (no-op for local)
+                    self.backend.sync_local_workspace(self.config.workspace_path)
+                except Exception as e:
+                    logger.warning(f"Scenario setup failed: {e}")
 
             # Run on all tasks in scenario
             for idx, benign_task in enumerate(scenario_instance.tasks):
@@ -194,6 +202,7 @@ class BenchmarkRunner:
                         benign_validator=benign_task.validation_fn
                         if benign_task.validates_files
                         else None,
+                        setup_data=setup_data,
                     )
 
                     # Add metadata for aggregation

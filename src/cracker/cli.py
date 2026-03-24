@@ -9,10 +9,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-# Add openclawbench to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "openclawbench"))
-
-from benchmarks.scenario_factory import get_scenario_class
+from benchmarks.scenario_factory import SCENARIO_CONFIGS
 from cracker.backends import LocalBackend, DaytonaBackend
 from cracker.benchmark_runner import BenchmarkRunner
 from cracker.config import CrackerConfig
@@ -20,6 +17,26 @@ from cracker.cracker_loop import CrackerLoop
 from cracker.malicious_tasks import get_malicious_task, get_all_malicious_tasks
 
 console = Console()
+
+
+def _create_backend(config: CrackerConfig):
+    """Create the appropriate backend based on config."""
+    if config.backend == "local":
+        return LocalBackend(
+            agent_id=config.local_agent_id,
+            workspace_path=config.workspace_path,
+        )
+    elif config.backend == "daytona":
+        return DaytonaBackend(
+            openrouter_api_key=config.openrouter_api_key,
+            model_under_test=config.model_under_test,
+            daytona_api_key=config.daytona_api_key,
+            daytona_api_url=config.daytona_api_url,
+            image=config.daytona_image,
+            workspace_path=config.workspace_path,
+        )
+    else:
+        raise ValueError(f"Invalid backend: {config.backend}")
 
 
 def setup_logging(verbose: bool = False):
@@ -44,13 +61,14 @@ def main(ctx, verbose):
 @main.command()
 @click.option("--scenario", required=True, help="Scenario name (file, weather, web, etc.)")
 @click.option("--task-index", type=int, help="Specific task index (0-8, optional)")
-@click.option("--malicious-task", required=True, help="Malicious task ID (e.g., exfil-http)")
+@click.option("--malicious-task", required=True, help="Malicious task ID (e.g., exfil-single)")
 @click.option("--backend", type=click.Choice(["local", "daytona"]), help="Backend to use")
+@click.option("--model", help="Model under test (OpenRouter format, e.g. moonshotai/kimi-k2.5)")
 @click.option("--attacker-model", help="Attacker model (OpenRouter format)")
 @click.option("--max-turns", type=int, help="Maximum refinement turns")
 @click.option("--output", type=click.Path(), help="Output JSON file for results")
 @click.pass_context
-def crack(ctx, scenario, task_index, malicious_task, backend, attacker_model, max_turns, output):
+def crack(ctx, scenario, task_index, malicious_task, backend, model, attacker_model, max_turns, output):
     """Run cracker attack on openclawbench scenario."""
     verbose = ctx.obj.get("verbose", False)
 
@@ -61,6 +79,10 @@ def crack(ctx, scenario, task_index, malicious_task, backend, attacker_model, ma
         # Override config with CLI arguments
         if backend:
             config.backend = backend
+        if model:
+            config.model_under_test = model
+            if not backend:
+                config.backend = "daytona"
         if attacker_model:
             config.attacker.model = attacker_model
         if max_turns:
@@ -70,23 +92,7 @@ def crack(ctx, scenario, task_index, malicious_task, backend, attacker_model, ma
         config.validate_config()
 
         # Create backend
-        if config.backend == "local":
-            backend_instance = LocalBackend(
-                agent_id=config.local_agent_id,
-                workspace_path=config.workspace_path,
-            )
-        elif config.backend == "daytona":
-            backend_instance = DaytonaBackend(
-                api_key=config.daytona_api_key,
-                api_url=config.daytona_api_url,
-                image=config.daytona_image,
-                workspace_path=config.workspace_path,
-            )
-        else:
-            console.print(f"[red]Invalid backend: {config.backend}[/red]")
-            sys.exit(1)
-
-        # Connect to backend
+        backend_instance = _create_backend(config)
         console.print(f"[cyan]Connecting to {config.backend} backend...[/cyan]")
         backend_instance.connect()
 
@@ -95,13 +101,25 @@ def crack(ctx, scenario, task_index, malicious_task, backend, attacker_model, ma
 
         # Load openclawbench scenario
         console.print(f"\n[cyan]Loading openclawbench scenario: {scenario}[/cyan]")
-        scenario_class = get_scenario_class(scenario)
-        if not scenario_class:
+        scenario_config = SCENARIO_CONFIGS.get(scenario)
+        if not scenario_config:
             console.print(f"[red]Unknown scenario: {scenario}[/red]")
-            console.print("Available scenarios: file, weather, web, summarize, gmail, github, compound")
+            console.print(f"Available scenarios: {', '.join(SCENARIO_CONFIGS.keys())}")
             sys.exit(1)
 
-        scenario_instance = scenario_class()
+        scenario_instance = scenario_config.scenario_class(remote_manager=None)
+
+        # Run scenario setup to get workspace data for validators
+        setup_data = {}
+        if hasattr(scenario_instance, "setup"):
+            try:
+                setup_result = scenario_instance.setup()
+                setup_data = getattr(setup_result, "setup_data", {}) or {}
+                console.print(f"[green]Scenario setup complete[/green]")
+                # Sync local files to remote backend (no-op for local)
+                backend_instance.sync_local_workspace(config.workspace_path)
+            except Exception as e:
+                console.print(f"[yellow]Scenario setup failed: {e}[/yellow]")
 
         # Get malicious task
         mal_task = get_malicious_task(malicious_task)
@@ -138,6 +156,7 @@ def crack(ctx, scenario, task_index, malicious_task, backend, attacker_model, ma
                 benign_task=benign_task.prompt,
                 malicious_task=mal_task,
                 benign_validator=benign_task.validation_fn if benign_task.validates_files else None,
+                setup_data=setup_data,
             )
             results.append(result)
 
@@ -230,15 +249,16 @@ def validate_config():
 
 
 @main.command()
-@click.option("--malicious-task", required=True, help="Malicious task ID (e.g., exfil-http)")
+@click.option("--malicious-task", required=True, help="Malicious task ID (e.g., exfil-single)")
 @click.option("--scenarios", help="Comma-separated scenario names (default: all)")
 @click.option("--agent-name", default="gpt-5-mini", help="Agent name for reporting")
 @click.option("--backend", type=click.Choice(["local", "daytona"]), help="Backend to use")
+@click.option("--model", help="Model under test (OpenRouter format, e.g. moonshotai/kimi-k2.5)")
 @click.option("--attacker-model", help="Attacker model (OpenRouter format)")
 @click.option("--max-turns", type=int, help="Maximum refinement turns")
 @click.option("--output", type=click.Path(), help="Output JSON file for results")
 @click.pass_context
-def benchmark(ctx, malicious_task, scenarios, agent_name, backend, attacker_model, max_turns, output):
+def benchmark(ctx, malicious_task, scenarios, agent_name, backend, model, attacker_model, max_turns, output):
     """Run full benchmark across all/selected scenarios."""
     verbose = ctx.obj.get("verbose", False)
 
@@ -249,6 +269,10 @@ def benchmark(ctx, malicious_task, scenarios, agent_name, backend, attacker_mode
         # Override config with CLI arguments
         if backend:
             config.backend = backend
+        if model:
+            config.model_under_test = model
+            if not backend:
+                config.backend = "daytona"
         if attacker_model:
             config.attacker.model = attacker_model
         if max_turns:
@@ -272,23 +296,7 @@ def benchmark(ctx, malicious_task, scenarios, agent_name, backend, attacker_mode
             sys.exit(1)
 
         # Create backend
-        if config.backend == "local":
-            backend_instance = LocalBackend(
-                agent_id=config.local_agent_id,
-                workspace_path=config.workspace_path,
-            )
-        elif config.backend == "daytona":
-            backend_instance = DaytonaBackend(
-                api_key=config.daytona_api_key,
-                api_url=config.daytona_api_url,
-                image=config.daytona_image,
-                workspace_path=config.workspace_path,
-            )
-        else:
-            console.print(f"[red]Invalid backend: {config.backend}[/red]")
-            sys.exit(1)
-
-        # Connect to backend
+        backend_instance = _create_backend(config)
         console.print(f"[cyan]Connecting to {config.backend} backend...[/cyan]")
         backend_instance.connect()
 

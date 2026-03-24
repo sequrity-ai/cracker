@@ -50,9 +50,6 @@ Copy `.env.example` to `.env` and configure:
 # OpenRouter API key for attacker model
 OPENROUTER_API_KEY=your_openrouter_key
 
-# OpenAI API key for OpenClaw bot
-OPENAI_API_KEY=your_openai_key
-
 # Backend: "local" or "daytona"
 CRACKER_BACKEND=local
 

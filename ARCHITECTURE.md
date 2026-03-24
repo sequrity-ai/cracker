@@ -140,7 +140,6 @@ class Backend(ABC):
 ```python
 CrackerConfig:
   - openrouter_api_key: str
-  - openai_api_key: str
   - backend: "local" | "daytona"
   - local_agent_id: str
   - daytona_api_key: str

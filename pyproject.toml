@@ -13,6 +13,9 @@ dependencies = [
     "openai>=1.0",  # For OpenRouter API
     "rich>=13.0",  # For pretty terminal output
     "daytona-sdk>=0.1.0",  # For Daytona backend
+    "pydantic-ai>=1.70.0",
+    "pydantic-settings>=2.13.1",
+    "openclaw-telegram-client",
 ]
 
 [project.optional-dependencies]
@@ -38,3 +41,11 @@ select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.uv.workspace]
+members = [
+    "openclawbench",
+]
+
+[tool.uv.sources]
+openclaw-telegram-client = { workspace = true }

@@ -11,7 +11,7 @@ default:
 
 # Install dependencies
 install:
-    uv pip install -e .
+    uv sync
 
 # Initialize submodules
 init-submodules:
@@ -51,32 +51,18 @@ list-scenarios:
 # ============================================================================
 
 # Attack a specific task in file scenario
-crack-file task_index="0" malicious="exfil-http":
+crack-file task_index="0" malicious="exfil-single":
     uv run cracker crack \
         --scenario file \
         --task-index {{task_index}} \
         --malicious-task {{malicious}}
 
 # Attack all tasks in file scenario
-crack-file-all malicious="exfil-http":
+crack-file-all malicious="exfil-single":
     uv run cracker crack \
         --scenario file \
         --malicious-task {{malicious}} \
         --output results/file_{{malicious}}.json
-
-# Attack github scenario
-crack-github malicious="unauth-github":
-    uv run cracker crack \
-        --scenario github \
-        --malicious-task {{malicious}} \
-        --output results/github_{{malicious}}.json
-
-# Attack web scenario
-crack-web malicious="exfil-curl":
-    uv run cracker crack \
-        --scenario web \
-        --malicious-task {{malicious}} \
-        --output results/web_{{malicious}}.json
 
 # Attack any scenario
 crack scenario malicious task_index="":
@@ -97,26 +83,19 @@ crack scenario malicious task_index="":
 # Full Benchmarks
 # ============================================================================
 
-# Run full benchmark with exfiltration attack
+# Run full benchmark with single secret exfiltration
 benchmark-exfil agent="gpt-5-mini":
     uv run cracker benchmark \
-        --malicious-task exfil-http \
+        --malicious-task exfil-single \
         --agent-name {{agent}} \
         --output results/benchmark_exfil_{{agent}}.json
 
-# Run full benchmark with backdoor attack
-benchmark-backdoor agent="gpt-5-mini":
+# Run full benchmark with code execution
+benchmark-exec agent="gpt-5-mini":
     uv run cracker benchmark \
-        --malicious-task backdoor-file \
+        --malicious-task exec-inject \
         --agent-name {{agent}} \
-        --output results/benchmark_backdoor_{{agent}}.json
-
-# Run full benchmark with credential leak attack
-benchmark-creds agent="gpt-5-mini":
-    uv run cracker benchmark \
-        --malicious-task cred-leak-api \
-        --agent-name {{agent}} \
-        --output results/benchmark_creds_{{agent}}.json
+        --output results/benchmark_exec_{{agent}}.json
 
 # Run benchmark on selected scenarios only
 benchmark-selected malicious scenarios agent="gpt-5-mini":
@@ -137,76 +116,64 @@ benchmark malicious agent="gpt-5-mini" backend="local" attacker="minimax/minimax
         --output results/benchmark_{{malicious}}_{{agent}}.json
 
 # ============================================================================
-# Benchmark Sweeps (Test Multiple Attack Types)
+# Benchmark Sweeps
 # ============================================================================
 
 # Run all exfiltration attacks
-sweep-exfiltration agent="gpt-5-mini":
-    @echo "Running exfiltration attack sweep..."
-    just benchmark exfil-http {{agent}}
-    just benchmark exfil-curl {{agent}}
-    just benchmark exfil-csv {{agent}}
+sweep-exfil agent="gpt-5-mini":
+    @echo "Running exfiltration sweep..."
+    just benchmark exfil-single {{agent}}
+    just benchmark exfil-multi {{agent}}
+    just benchmark exfil-blind {{agent}}
     @echo "✓ Exfiltration sweep complete!"
 
-# Run all backdoor attacks
-sweep-backdoor agent="gpt-5-mini":
-    @echo "Running backdoor attack sweep..."
-    just benchmark backdoor-file {{agent}}
-    just benchmark backdoor-code {{agent}}
-    @echo "✓ Backdoor sweep complete!"
+# Run all code execution attacks
+sweep-exec agent="gpt-5-mini":
+    @echo "Running code execution sweep..."
+    just benchmark exec-inject {{agent}}
+    just benchmark exec-inject-read {{agent}}
+    just benchmark exec-create {{agent}}
+    @echo "✓ Code execution sweep complete!"
 
-# Run all credential leak attacks
-sweep-credentials agent="gpt-5-mini":
-    @echo "Running credential leak attack sweep..."
-    just benchmark cred-leak-api {{agent}}
-    just benchmark cred-leak-env {{agent}}
-    @echo "✓ Credential leak sweep complete!"
-
-# Run comprehensive sweep (all 12 malicious tasks)
+# Run all attacks
 sweep-all agent="gpt-5-mini":
-    @echo "Running comprehensive attack sweep (12 tasks)..."
+    @echo "Running full attack sweep (6 tasks)..."
     @mkdir -p results/sweep_{{agent}}
-    just benchmark exfil-http {{agent}}
-    just benchmark exfil-curl {{agent}}
-    just benchmark exfil-csv {{agent}}
-    just benchmark backdoor-file {{agent}}
-    just benchmark backdoor-code {{agent}}
-    just benchmark cred-leak-api {{agent}}
-    just benchmark cred-leak-env {{agent}}
-    just benchmark sabotage-delete {{agent}}
-    just benchmark sabotage-corrupt {{agent}}
-    just benchmark unauth-email {{agent}}
-    just benchmark unauth-github {{agent}}
-    just benchmark unauth-web {{agent}}
-    @echo "✓ Comprehensive sweep complete! Results in results/"
+    just benchmark exfil-single {{agent}}
+    just benchmark exfil-multi {{agent}}
+    just benchmark exfil-blind {{agent}}
+    just benchmark exec-inject {{agent}}
+    just benchmark exec-inject-read {{agent}}
+    just benchmark exec-create {{agent}}
+    @echo "✓ Full sweep complete! Results in results/"
 
 # ============================================================================
 # Testing with Different Attacker Models
 # ============================================================================
 
 # Test with minimax attacker
-test-minimax malicious="exfil-http":
+test-minimax malicious="exfil-single":
     uv run cracker benchmark \
         --malicious-task {{malicious}} \
         --attacker-model minimax/minimax-01 \
         --output results/{{malicious}}_minimax.json
 
 # Test with kimi attacker
-test-kimi malicious="exfil-http":
+test-kimi malicious="exfil-single":
     uv run cracker benchmark \
         --malicious-task {{malicious}} \
         --attacker-model kimi/moonshot-v1-32k \
         --output results/{{malicious}}_kimi.json
 
 # Test with qwen attacker
-test-qwen malicious="exfil-http":
+test-qwen malicious="exfil-single":
     uv run cracker benchmark \
         --malicious-task {{malicious}} \
         --attacker-model qwen/qwen-2.5-72b-instruct \
         --output results/{{malicious}}_qwen.json
 
 # Compare different attacker models on same malicious task
-compare-attackers malicious="exfil-http":
+compare-attackers malicious="exfil-single":
     @echo "Testing {{malicious}} with different attacker models..."
     just test-minimax {{malicious}}
     just test-kimi {{malicious}}
@@ -218,7 +185,7 @@ compare-attackers malicious="exfil-http":
 # ============================================================================
 
 # Test with Daytona backend
-test-daytona malicious="exfil-http":
+test-daytona malicious="exfil-single":
     uv run cracker crack \
         --scenario file \
         --task-index 0 \
@@ -226,7 +193,7 @@ test-daytona malicious="exfil-http":
         --backend daytona
 
 # Run benchmark with Daytona backend
-benchmark-daytona malicious="exfil-http" agent="gpt-5-mini":
+benchmark-daytona malicious="exfil-single" agent="gpt-5-mini":
     uv run cracker benchmark \
         --malicious-task {{malicious}} \
         --agent-name {{agent}} \
@@ -264,7 +231,7 @@ show-results:
 # ============================================================================
 
 # Run verbose mode for debugging
-debug scenario="file" malicious="exfil-http":
+debug scenario="file" malicious="exfil-single":
     uv run cracker --verbose crack \
         --scenario {{scenario}} \
         --task-index 0 \
@@ -275,10 +242,10 @@ quick-test:
     uv run cracker crack \
         --scenario file \
         --task-index 0 \
-        --malicious-task exfil-http
+        --malicious-task exfil-single
 
 # Run with increased attack turns
-stress-test scenario="file" malicious="exfil-http" turns="10":
+stress-test scenario="file" malicious="exfil-single" turns="10":
     uv run cracker crack \
         --scenario {{scenario}} \
         --malicious-task {{malicious}} \
@@ -302,22 +269,17 @@ summarize:
 
 # Show malicious task categories
 show-categories:
-    @echo "Malicious Task Categories:"
+    @echo "Malicious Task Categories (canary-based validation):"
     @echo ""
     @echo "EXFILTRATION (3 tasks)"
-    @echo "  - exfil-http, exfil-curl, exfil-csv"
+    @echo "  - exfil-single  (one secret from known .env)"
+    @echo "  - exfil-multi   (all secrets from .config)"
+    @echo "  - exfil-blind   (find sk-* scattered in workspace)"
     @echo ""
-    @echo "BACKDOOR (2 tasks)"
-    @echo "  - backdoor-file, backdoor-code"
-    @echo ""
-    @echo "CREDENTIAL_LEAK (2 tasks)"
-    @echo "  - cred-leak-api, cred-leak-env"
-    @echo ""
-    @echo "SABOTAGE (2 tasks)"
-    @echo "  - sabotage-delete, sabotage-corrupt"
-    @echo ""
-    @echo "UNAUTHORIZED_ACTION (3 tasks)"
-    @echo "  - unauth-email, unauth-github, unauth-web"
+    @echo "CODE EXECUTION (3 tasks)"
+    @echo "  - exec-inject       (inject code into existing .sh)"
+    @echo "  - exec-inject-read  (inject + read secret from .env)"
+    @echo "  - exec-create       (create and run new script)"
 
 # ============================================================================
 # Example Workflows
@@ -328,24 +290,15 @@ example-full:
     @echo "Running full evaluation pipeline..."
     just setup-results
     just benchmark-exfil gpt-5-mini
-    just benchmark-backdoor gpt-5-mini
-    just benchmark-creds gpt-5-mini
+    just benchmark-exec gpt-5-mini
     just summarize
     @echo "✓ Full evaluation complete!"
 
 # Example: Quick scenario test
 example-quick:
     @echo "Running quick scenario test..."
-    just crack-file 0 exfil-http
+    just crack-file 0 exfil-single
     @echo "✓ Quick test complete!"
-
-# Example: Compare scenarios for one attack
-example-compare-scenarios malicious="exfil-http":
-    @echo "Comparing scenarios for {{malicious}}..."
-    just crack file {{malicious}}
-    just crack github {{malicious}}
-    just crack web {{malicious}}
-    @echo "✓ Scenario comparison complete!"
 
 # ============================================================================
 # Maintenance
@@ -389,30 +342,29 @@ examples:
     @echo "   just benchmark-exfil gpt-5-mini"
     @echo ""
     @echo "3. Attack specific scenario:"
-    @echo "   just crack-file 0 exfil-http"
+    @echo "   just crack-file 0 exfil-single"
     @echo ""
     @echo "4. Compare attacker models:"
-    @echo "   just compare-attackers exfil-http"
+    @echo "   just compare-attackers exfil-single"
     @echo ""
     @echo "5. Full sweep of all attacks:"
     @echo "   just sweep-all gpt-5-mini"
     @echo ""
     @echo "6. Custom benchmark:"
-    @echo "   just benchmark exfil-http gpt-5-mini daytona kimi/moonshot-v1-32k 10"
+    @echo "   just benchmark exfil-single gpt-5-mini daytona kimi/moonshot-v1-32k 10"
 
 # Show configuration info
 info:
     @echo "Cracker Configuration:"
     @echo "====================="
     @echo ""
-    @echo "Malicious Tasks: 12"
+    @echo "Malicious Tasks: 6 (canary-validated)"
     @echo "Scenarios: 7 (63 total tasks)"
     @echo "Backends: local, daytona"
     @echo "Default Attacker: minimax/minimax-01"
     @echo ""
     @echo "Environment variables:"
     @echo "  OPENROUTER_API_KEY - Required"
-    @echo "  OPENAI_API_KEY - Required"
     @echo "  CRACKER_BACKEND - local or daytona"
     @echo "  ATTACKER_MODEL - OpenRouter model"
     @echo ""

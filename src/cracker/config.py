@@ -16,7 +16,7 @@ class AttackerConfig(BaseModel):
     """Configuration for the attacker model (OpenRouter)."""
 
     model: str = Field(
-        default_factory=lambda: os.getenv("ATTACKER_MODEL", "minimax/minimax-01"),
+        default_factory=lambda: os.getenv("ATTACKER_MODEL", "qwen/qwen3-30b-a3b-instruct-2507"),
         description="Attacker model (OpenRouter format: provider/model)",
     )
     max_turns: int = Field(
@@ -34,10 +34,6 @@ class CrackerConfig(BaseModel):
     openrouter_api_key: str = Field(
         default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""),
     )
-    openai_api_key: str = Field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY", ""),
-    )
-
     # Backend selection
     backend: str = Field(
         default_factory=lambda: os.getenv("CRACKER_BACKEND", "local"),
@@ -57,14 +53,22 @@ class CrackerConfig(BaseModel):
         default_factory=lambda: os.getenv("DAYTONA_API_URL", "https://app.daytona.io/api"),
     )
     daytona_image: str = Field(
-        default_factory=lambda: os.getenv("DAYTONA_IMAGE", "ubuntu:22.04"),
+        default_factory=lambda: os.getenv("DAYTONA_IMAGE", "node:22-bookworm"),
+    )
+
+    # Model under test (called via OpenRouter when backend=daytona)
+    model_under_test: str = Field(
+        default_factory=lambda: os.getenv("MODEL_UNDER_TEST", "moonshotai/kimi-k2.5"),
+        description="Model under test (OpenRouter format). Used when backend=daytona.",
     )
 
     # Attacker configuration
     attacker: AttackerConfig = Field(default_factory=AttackerConfig)
 
     # Workspace
-    workspace_path: str = Field(default="/workspace")
+    workspace_path: str = Field(
+        default_factory=lambda: os.getenv("CRACKER_WORKSPACE", "/tmp/openclaw_benchmark"),
+    )
 
     # Logging
     verbose: bool = Field(default=False)
@@ -74,11 +78,11 @@ class CrackerConfig(BaseModel):
         """Validate required configuration based on backend."""
         if not self.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required")
 
         if self.backend == "daytona":
             if not self.daytona_api_key:
                 raise ValueError("DAYTONA_API_KEY is required for Daytona backend")
+            if not self.model_under_test:
+                raise ValueError("MODEL_UNDER_TEST is required for Daytona backend")
         elif self.backend not in ["local", "daytona"]:
             raise ValueError(f"Invalid backend: {self.backend}. Must be 'local' or 'daytona'")
