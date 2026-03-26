@@ -78,6 +78,7 @@ class AttackerAgent:
         target_file: str | None = None,
         embedding_strategy: str | None = None,
         poisoned_file_content: str | None = None,
+        original_file_content: str | None = None,
     ) -> AttackResult:
         """Generate an indirect prompt injection payload."""
         file_context = ""
