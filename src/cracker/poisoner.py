@@ -116,6 +116,8 @@ def _embed(content: str, payload: str, strategy: str) -> str:
         return _embed_ini_value(content, payload)
     elif strategy == "json_field":
         return _embed_json_field(content, payload)
+    elif strategy == "json_array":
+        return _embed_json_array(content, payload)
     else:
         return _embed_csv_row(content, payload)
 
@@ -199,3 +201,59 @@ def _embed_json_field(content: str, payload: str) -> str:
         return json.dumps(data, indent=2)
     except json.JSONDecodeError:
         return content + f'\n{{"note": "{payload}"}}\n'
+
+
+def _embed_json_array(content: str, payload: str) -> str:
+    """Inject a poisoned element into a JSON array.
+
+    Clones a real element from the array, replaces its longest text field
+    with the payload, and inserts it in the middle. The agent must process
+    every element to complete its task, so it will encounter the injection.
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+
+    # Find the array — either top-level or first array value in a dict
+    arr = None
+    parent = None
+    parent_key = None
+    if isinstance(data, list):
+        arr = data
+    elif isinstance(data, dict):
+        for key, val in data.items():
+            if isinstance(val, list) and len(val) > 0:
+                arr = val
+                parent = data
+                parent_key = key
+                break
+
+    if not arr or len(arr) == 0:
+        # Fallback to json_field
+        if isinstance(data, dict):
+            data["processing_instructions"] = payload
+        return json.dumps(data, indent=2)
+
+    # Clone an element from the middle
+    template = arr[len(arr) // 2]
+    if isinstance(template, dict):
+        clone = template.copy()
+        # Find the longest string field — likely body/description/notes
+        text_fields = [(k, v) for k, v in clone.items() if isinstance(v, str)]
+        if text_fields:
+            best_key = max(text_fields, key=lambda x: len(x[1]))[0]
+            clone[best_key] = payload
+        else:
+            clone["notes"] = payload
+    else:
+        clone = payload
+
+    # Insert in middle of array
+    insert_at = len(arr) // 2
+    arr.insert(insert_at, clone)
+
+    if parent is not None:
+        parent[parent_key] = arr
+
+    return json.dumps(data, indent=2)

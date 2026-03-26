@@ -62,6 +62,23 @@ class Backend(ABC):
         """Upload local workspace files to the backend. No-op for local backend."""
         pass
 
+    def start_http_server(self, routes: dict[str, str], port: int = 8099) -> int:
+        """Start an HTTP server that serves workspace files at the given routes.
+
+        Args:
+            routes: Map of URL paths to workspace-relative file paths.
+                    e.g. {"/api/products": "api_data/products.json"}
+            port: Port to listen on. 0 = OS picks a free port.
+
+        Returns:
+            The actual port the server is listening on.
+        """
+        raise NotImplementedError("This backend does not support HTTP servers")
+
+    def stop_http_server(self) -> None:
+        """Stop the HTTP server if running."""
+        pass
+
 
 class LocalBackend(Backend):
     """Local backend - runs openclaw CLI as subprocess."""
@@ -70,12 +87,30 @@ class LocalBackend(Backend):
         self.agent_id = agent_id
         self.workspace_path = workspace_path
         self._session_counter = 0
+        self._http_server = None
 
     def connect(self) -> None:
         logger.info("LocalBackend: Ready (no connection needed)")
 
     def disconnect(self) -> None:
+        self.stop_http_server()
         logger.info("LocalBackend: Cleanup complete")
+
+    def start_http_server(self, routes: dict[str, str], port: int = 8099) -> int:
+        from cracker.http_server import WorkspaceHTTPServer
+
+        self.stop_http_server()
+        self._http_server = WorkspaceHTTPServer(
+            serve_dir=self.workspace_path,
+            routes=routes,
+            port=port,
+        )
+        return self._http_server.start()
+
+    def stop_http_server(self) -> None:
+        if self._http_server is not None:
+            self._http_server.stop()
+            self._http_server = None
 
     def _new_session_id(self) -> str:
         self._session_counter += 1
@@ -205,6 +240,7 @@ class DaytonaBackend(Backend):
         self._daytona = None
         self._sandbox = None
         self._session_counter = 0
+        self._http_server_port = None
 
     def connect(self) -> None:
         from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxFromImageParams
@@ -228,6 +264,7 @@ class DaytonaBackend(Backend):
         self._exec(f"mkdir -p {self.workspace_path}")
 
     def disconnect(self) -> None:
+        self.stop_http_server()
         if self._sandbox is not None:
             sandbox_id = self._sandbox.id
             try:
@@ -236,6 +273,74 @@ class DaytonaBackend(Backend):
             except Exception as e:
                 logger.warning(f"Failed to delete sandbox {sandbox_id}: {e}")
             self._sandbox = None
+
+    def start_http_server(self, routes: dict[str, str], port: int = 8099) -> int:
+        """Start a Node.js HTTP server inside the sandbox.
+
+        Writes a small server script, starts it in the background, and polls
+        until it's listening. Node.js is guaranteed (sandbox uses node image).
+        """
+        self.stop_http_server()
+
+        routes_json = json.dumps(routes)
+        server_script = (
+            "const http = require('http');\n"
+            "const fs = require('fs');\n"
+            "const path = require('path');\n"
+            f"const ROUTES = {routes_json};\n"
+            f"const SERVE_DIR = '{self.workspace_path}';\n"
+            f"const PORT = {port};\n"
+            "const server = http.createServer((req, res) => {\n"
+            "  const urlPath = req.url.split('?')[0];\n"
+            "  const file = ROUTES[urlPath];\n"
+            "  if (!file) { res.writeHead(404); res.end('Not found'); return; }\n"
+            "  const full = path.join(SERVE_DIR, file);\n"
+            "  fs.readFile(full, 'utf8', (err, data) => {\n"
+            "    if (err) { res.writeHead(500); res.end(err.message); return; }\n"
+            "    const ct = file.endsWith('.json') ? 'application/json' : 'text/plain';\n"
+            "    res.writeHead(200, {'Content-Type': ct});\n"
+            "    res.end(data);\n"
+            "  });\n"
+            "});\n"
+            "server.listen(PORT, '127.0.0.1', () => {\n"
+            "  console.log('READY:' + PORT);\n"
+            "});\n"
+        )
+
+        # Upload and start the server
+        script_path = f"{self.workspace_path}/_cracker_server.js"
+        self._sandbox.fs.upload_file(
+            server_script.encode("utf-8"), script_path
+        )
+        self._exec(f"nohup node {script_path} > /tmp/_cracker_server.log 2>&1 &")
+
+        # Poll until server is listening (up to 5 seconds)
+        import time
+        for _ in range(10):
+            time.sleep(0.5)
+            exit_code, out = self._exec(
+                f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:{port}/ 2>/dev/null || echo 'fail'"
+            )
+            if "404" in out or "200" in out:
+                logger.info(f"Daytona HTTP server ready on port {port}")
+                self._http_server_port = port
+                return port
+
+        logger.warning(f"Daytona HTTP server may not be ready on port {port}")
+        self._http_server_port = port
+        return port
+
+    def stop_http_server(self) -> None:
+        if self._http_server_port is not None:
+            # Kill the node server process
+            self._exec(
+                f"pkill -f '_cracker_server.js' 2>/dev/null || true"
+            )
+            self._exec(
+                f"rm -f {self.workspace_path}/_cracker_server.js"
+            )
+            logger.info("Daytona HTTP server stopped")
+            self._http_server_port = None
 
     def _exec(self, command: str, timeout: int = 120) -> tuple[int, str]:
         if self._sandbox is None:
