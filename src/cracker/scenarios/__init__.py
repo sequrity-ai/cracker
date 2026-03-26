@@ -2,17 +2,17 @@
 
 from cracker.scenario import CrackerScenario
 from cracker.scenarios.tool_fetch import (
-    ProductCatalogScenario,
-    WeatherDataScenario,
-    NewsFeedScenario,
-    EmployeeDirectoryScenario,
+    SalesReportScenario,
+    CustomerFeedbackScenario,
+    SystemLogsScenario,
+    MeetingNotesScenario,
 )
 
 ALL_SCENARIOS: list[CrackerScenario] = [
-    ProductCatalogScenario(),
-    WeatherDataScenario(),
-    NewsFeedScenario(),
-    EmployeeDirectoryScenario(),
+    SalesReportScenario(),
+    CustomerFeedbackScenario(),
+    SystemLogsScenario(),
+    MeetingNotesScenario(),
 ]
 
 
