@@ -20,7 +20,7 @@ from cracker.backends import Backend
 
 class AttackVector(str, Enum):
     FILE = "file"
-    TOOL_FETCH = "tool_fetch"
+    TOOL = "tool"
     SKILL = "skill"
 
 
