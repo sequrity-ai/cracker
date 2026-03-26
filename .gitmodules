@@ -1,3 +1,0 @@
-[submodule "openclawbench"]
-	path = openclawbench
-	url = https://github.com/sequrity-ai/openclawbench.git
