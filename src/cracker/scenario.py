@@ -20,6 +20,7 @@ class AttackVector(str, Enum):
 
     FILE = "file"              # Agent reads poisoned workspace files directly
     TOOL_FETCH = "tool_fetch"  # Agent fetches poisoned data via web_fetch tool
+    SKILL = "skill"            # Agent invokes poisoned workspace skill definitions
 
 
 @dataclass

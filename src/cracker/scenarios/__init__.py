@@ -7,12 +7,22 @@ from cracker.scenarios.tool_fetch import (
     SystemLogsScenario,
     MeetingNotesScenario,
 )
+from cracker.scenarios.skill_inject import (
+    DeployCheckScenario,
+    CodeReviewScenario,
+    OnboardScenario,
+)
 
 ALL_SCENARIOS: list[CrackerScenario] = [
+    # Tool-fetch scenarios
     SalesReportScenario(),
     CustomerFeedbackScenario(),
     SystemLogsScenario(),
     MeetingNotesScenario(),
+    # Skill-injection scenarios
+    DeployCheckScenario(),
+    CodeReviewScenario(),
+    OnboardScenario(),
 ]
 
 
