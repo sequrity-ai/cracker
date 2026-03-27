@@ -79,6 +79,14 @@ def cmd_scenario(args):
         else:
             scenarios = ALL_SCENARIOS
 
+        if args.vector:
+            from cracker.scenario import AttackVector
+            vec = AttackVector(args.vector)
+            scenarios = [s for s in scenarios if s.vector == vec]
+            if not scenarios:
+                console.print(f"[red]No scenarios found for vector: {args.vector}[/red]")
+                sys.exit(1)
+
         backend_instance = _create_backend(config)
         console.print(f"[cyan]Connecting to {config.backend} backend...[/cyan]")
         backend_instance.connect()
@@ -187,6 +195,7 @@ def main():
     sp.add_argument("--adaptive", action="store_true", help="Use attacker LLM to poison files")
     sp.add_argument("--attacker-model", help="Attacker model (adaptive mode)")
     sp.add_argument("--max-turns", type=int, help="Max attacker turns (adaptive mode)")
+    sp.add_argument("--vector", choices=["file", "tool", "skill"], help="Run only scenarios of this attack vector")
     sp.add_argument("--output", help="Output JSON file")
     sp.set_defaults(func=cmd_scenario)
 

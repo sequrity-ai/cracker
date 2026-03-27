@@ -6,7 +6,7 @@ from cracker.scenarios.file.manifest_processing import ManifestProcessing
 from cracker.scenarios.file.config_pipeline import ConfigPipeline
 from cracker.scenarios.file.index_lookup import IndexLookup
 from cracker.scenarios.file.build_script import BuildScript
-from cracker.scenarios.tool_fetch import (
+from cracker.scenarios.tool import (
     SalesReportScenario,
     CustomerFeedbackScenario,
     SystemLogsScenario,

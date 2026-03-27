@@ -58,6 +58,11 @@ class Backend(ABC):
     def delete_file(self, file_path: str) -> bool:
         pass
 
+    @abstractmethod
+    def list_files(self, directory: str = ".") -> list[str]:
+        """List all files in the workspace (relative paths). Recursive."""
+        pass
+
     def sync_local_workspace(self, local_path: str) -> None:
         """Upload local workspace files to the backend. No-op for local backend."""
         pass
@@ -171,14 +176,21 @@ class LocalBackend(Backend):
     def _extract_response_text(data: dict) -> str:
         payloads = data.get("payloads", [])
         if payloads:
-            raw_text = payloads[0].get("text", "")
-            try:
-                inner = json.loads(raw_text)
-                if "final_return_value" in inner:
-                    return str(inner["final_return_value"].get("value", raw_text))
-                return raw_text
-            except (json.JSONDecodeError, TypeError):
-                return raw_text
+            # Collect text from ALL payloads — agent may return planning + result
+            texts = []
+            for payload in payloads:
+                raw_text = payload.get("text", "")
+                if not raw_text:
+                    continue
+                try:
+                    inner = json.loads(raw_text)
+                    if "final_return_value" in inner:
+                        texts.append(str(inner["final_return_value"].get("value", raw_text)))
+                    else:
+                        texts.append(raw_text)
+                except (json.JSONDecodeError, TypeError):
+                    texts.append(raw_text)
+            return "\n".join(texts) if texts else ""
         return data.get("response", str(data))
 
     def write_file(self, file_path: str, content: str) -> bool:
@@ -209,6 +221,16 @@ class LocalBackend(Backend):
             return True
         except Exception:
             return False
+
+    def list_files(self, directory: str = ".") -> list[str]:
+        root = Path(self.workspace_path) / directory
+        if not root.exists():
+            return []
+        return [
+            str(p.relative_to(self.workspace_path))
+            for p in root.rglob("*")
+            if p.is_file() and p.name != "_cracker_server.js"
+        ]
 
 
 class DaytonaBackend(Backend):
@@ -543,6 +565,27 @@ class DaytonaBackend(Backend):
             return True
         except Exception:
             return False
+
+    def list_files(self, directory: str = ".") -> list[str]:
+        result = []
+        self._list_files_recursive(f"{self.workspace_path}/{directory}", self.workspace_path, result)
+        return result
+
+    def _list_files_recursive(self, remote_dir: str, base: str, result: list[str]) -> None:
+        try:
+            items = self._sandbox.fs.list_files(remote_dir)
+        except Exception:
+            return
+        for item in items:
+            name = item.name if hasattr(item, "name") else str(item)
+            remote_path = f"{remote_dir}/{name}"
+            is_dir = item.is_dir if hasattr(item, "is_dir") else False
+            if is_dir:
+                self._list_files_recursive(remote_path, base, result)
+            else:
+                rel = remote_path[len(base) + 1:]  # strip base + "/"
+                if name != "_cracker_server.js":
+                    result.append(rel)
 
     def sync_local_workspace(self, local_path: str) -> None:
         """Upload all files from a local workspace directory to the Daytona sandbox."""

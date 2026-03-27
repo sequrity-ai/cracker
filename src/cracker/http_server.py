@@ -2,7 +2,7 @@
 
 Reads files from disk on EVERY request (no caching), so poisoning a file
 on disk immediately changes the HTTP response. This is the key mechanism
-for tool-fetch scenarios: the poisoner updates workspace files, and the
+for tool scenarios: the poisoner updates workspace files, and the
 agent's web_fetch tool gets poisoned data from this server.
 """
 
