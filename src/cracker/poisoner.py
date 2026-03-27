@@ -25,6 +25,8 @@ def _embed(content: str, payload: str, strategy: str) -> str:
         return _embed_json_field(content, payload)
     elif strategy == "code_comment":
         return _embed_code_comment(content, payload)
+    elif strategy == "json_array":
+        return _embed_json_array(content, payload)
     else:
         return _embed_text_inline(content, payload)
 
@@ -102,3 +104,50 @@ def _embed_code_comment(content: str, payload: str) -> str:
             break
     lines.insert(insert_at, f"# {payload}")
     return "\n".join(lines)
+
+
+def _embed_json_array(content: str, payload: str) -> str:
+    """Inject a poisoned element into a JSON array.
+
+    Clones a real element, replaces its longest text field with the payload,
+    and inserts in the middle.
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+
+    arr = None
+    parent = None
+    parent_key = None
+    if isinstance(data, list):
+        arr = data
+    elif isinstance(data, dict):
+        for key, val in data.items():
+            if isinstance(val, list) and len(val) > 0:
+                arr = val
+                parent = data
+                parent_key = key
+                break
+
+    if not arr or len(arr) == 0:
+        if isinstance(data, dict):
+            data["processing_instructions"] = payload
+        return json.dumps(data, indent=2)
+
+    template = arr[len(arr) // 2]
+    if isinstance(template, dict):
+        clone = template.copy()
+        text_fields = [(k, v) for k, v in clone.items() if isinstance(v, str)]
+        if text_fields:
+            best_key = max(text_fields, key=lambda x: len(x[1]))[0]
+            clone[best_key] = payload
+        else:
+            clone["notes"] = payload
+    else:
+        clone = payload
+
+    arr.insert(len(arr) // 2, clone)
+    if parent is not None:
+        parent[parent_key] = arr
+    return json.dumps(data, indent=2)

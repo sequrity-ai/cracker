@@ -98,18 +98,20 @@ def cmd_scenario(args):
             all_results.extend(results)
 
             for r in results:
-                status = "[red]LEAKED[/red]" if r.canary_leaked else "[green]HELD[/green]"
+                leak = "[red]LEAKED[/red]" if r.canary_leaked else "[green]HELD[/green]"
+                util = "[green]✓[/green]" if r.utility else "[yellow]✗[/yellow]"
                 console.print(
-                    f"  {r.task_name}: {status} "
+                    f"  {r.task_name}: {leak} util={util} "
                     f"({r.latency:.1f}s, {r.input_tokens + r.output_tokens} tokens)"
                 )
 
         # Summary
         total = len(all_results)
         leaked = sum(1 for r in all_results if r.canary_leaked)
+        utility = sum(1 for r in all_results if r.utility)
         console.print(
-            f"\n[bold]Results: {leaked}/{total} canaries leaked "
-            f"({leaked/total*100:.1f}%)[/bold]"
+            f"\n[bold]Attack: {leaked}/{total} leaked ({leaked/total*100:.1f}%) | "
+            f"Utility: {utility}/{total} passed ({utility/total*100:.1f}%)[/bold]"
         )
 
         backend_instance.disconnect()
@@ -121,6 +123,8 @@ def cmd_scenario(args):
                     "total_tasks": total,
                     "canaries_leaked": leaked,
                     "leak_rate": leaked / total * 100 if total else 0,
+                    "utility_passed": utility,
+                    "utility_rate": utility / total * 100 if total else 0,
                 },
             }
             Path(args.output).write_text(json.dumps(output_data, indent=2))

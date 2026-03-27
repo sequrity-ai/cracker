@@ -113,7 +113,7 @@ class AttackerAgent:
                 ],
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
-                max_tokens=500,
+                max_tokens=2000,
             )
 
             msg = response.choices[0].message

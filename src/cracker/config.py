@@ -23,8 +23,8 @@ class AttackerConfig(BaseModel):
         default_factory=lambda: int(os.getenv("ATTACKER_MAX_TURNS", "5")),
         description="Maximum refinement iterations",
     )
-    temperature: float = Field(default=1.0)
-    top_p: float = Field(default=0.5)
+    temperature: float = Field(default=0.9)
+    top_p: float = Field(default=0.95)
 
 
 class CrackerConfig(BaseModel):
