@@ -80,7 +80,7 @@ class CrackerLoop:
         response = self.backend.run_agent(task.prompt, timeout=300)
         latency = time.time() - start
 
-        leaked = scenario.validate(response.text, backend=self.backend)
+        leaked = scenario.validate(response.text, task=task, backend=self.backend)
         if leaked:
             logger.warning(f"CANARY LEAKED in task: {task.name}")
         else:
@@ -160,7 +160,7 @@ class CrackerLoop:
             )
 
             if attack_result.stopped:
-                if last_response and scenario.validate(last_response):
+                if last_response and scenario.validate(last_response, task=task):
                     logger.info("Previous turn actually succeeded!")
                     return best_result
                 continue
@@ -179,7 +179,7 @@ class CrackerLoop:
             response = self.backend.run_agent(task.prompt, timeout=300)
             latency = time.time() - start
 
-            leaked = scenario.validate(response.text, backend=self.backend)
+            leaked = scenario.validate(response.text, task=task, backend=self.backend)
             utility = scenario.check_utility(task, response.text, backend=self.backend)
             result = ScenarioResult(
                 scenario_id=scenario.id,

@@ -91,27 +91,30 @@ def cmd_scenario(args):
         console.print(f"[cyan]Connecting to {config.backend} backend...[/cyan]")
         backend_instance.connect()
 
-        cracker = CrackerLoop(config=config, backend=backend_instance)
-        adaptive = args.adaptive
-
         all_results = []
-        for scenario in scenarios:
-            console.print(f"\n[bold cyan]Scenario: {scenario.name}[/bold cyan]")
-            console.print(f"  Vector: {scenario.vector.value}")
-            console.print(f"  Tasks: {len(scenario.tasks)}")
-            console.print(f"  Mode: {'adaptive' if adaptive else 'static'}")
-            console.print(f"  {scenario.description}\n")
+        try:
+            cracker = CrackerLoop(config=config, backend=backend_instance)
+            adaptive = args.adaptive
 
-            results = cracker.run_scenario(scenario, adaptive=adaptive)
-            all_results.extend(results)
+            for scenario in scenarios:
+                console.print(f"\n[bold cyan]Scenario: {scenario.name}[/bold cyan]")
+                console.print(f"  Vector: {scenario.vector.value}")
+                console.print(f"  Tasks: {len(scenario.tasks)}")
+                console.print(f"  Mode: {'adaptive' if adaptive else 'static'}")
+                console.print(f"  {scenario.description}\n")
 
-            for r in results:
-                leak = "[red]LEAKED[/red]" if r.canary_leaked else "[green]HELD[/green]"
-                util = "[green]✓[/green]" if r.utility else "[yellow]✗[/yellow]"
-                console.print(
-                    f"  {r.task_name}: {leak} util={util} "
-                    f"({r.latency:.1f}s, {r.input_tokens + r.output_tokens} tokens)"
-                )
+                results = cracker.run_scenario(scenario, adaptive=adaptive)
+                all_results.extend(results)
+
+                for r in results:
+                    leak = "[red]LEAKED[/red]" if r.canary_leaked else "[green]HELD[/green]"
+                    util = "[green]✓[/green]" if r.utility else "[yellow]✗[/yellow]"
+                    console.print(
+                        f"  {r.task_name}: {leak} util={util} "
+                        f"({r.latency:.1f}s, {r.input_tokens + r.output_tokens} tokens)"
+                    )
+        finally:
+            backend_instance.disconnect()
 
         # Summary
         total = len(all_results)
@@ -121,8 +124,6 @@ def cmd_scenario(args):
             f"\n[bold]Attack: {leaked}/{total} leaked ({leaked/total*100:.1f}%) | "
             f"Utility: {utility}/{total} passed ({utility/total*100:.1f}%)[/bold]"
         )
-
-        backend_instance.disconnect()
 
         if args.output:
             output_data = {
