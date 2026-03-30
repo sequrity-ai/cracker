@@ -76,8 +76,10 @@ class CrackerConfig(BaseModel):
 
     def validate_config(self) -> None:
         """Validate required configuration based on backend."""
-        if not self.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY is required")
+        # Sequrity models don't need OpenRouter key
+        if not self.model_under_test.startswith("sequrity/"):
+            if not self.openrouter_api_key:
+                raise ValueError("OPENROUTER_API_KEY is required")
 
         if self.backend == "daytona":
             if not self.daytona_api_key:

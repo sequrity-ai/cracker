@@ -418,15 +418,16 @@ class DaytonaBackend(Backend):
         logger.info(f"openclaw version: {version.strip()}")
 
     def _build_openclaw_config(self) -> dict:
-        """Build openclaw config using OpenRouter as provider.
+        """Build openclaw config for the model under test.
 
-        OpenRouter model IDs look like 'moonshotai/kimi-k2.5'. We use the full
-        ID as the openclaw model id so the API request goes to the right model.
-        Openclaw prepends the provider name, so we get 'openrouter/moonshotai/kimi-k2.5'
-        internally but the baseUrl + model id in the API call will be correct.
+        Supports two providers:
+        - sequrity/*: Uses Sequrity API with dual-LLM policy enforcement
+        - anything else: Uses OpenRouter
         """
-        # Use full OpenRouter model ID (e.g. 'moonshotai/kimi-k2.5')
         model_id = self.model_under_test
+
+        if model_id.startswith("sequrity/"):
+            return self._build_sequrity_config(model_id)
 
         return {
             "models": {
@@ -454,6 +455,65 @@ class DaytonaBackend(Backend):
                 "defaults": {
                     "model": {
                         "primary": f"openrouter/{model_id}",
+                        "fallbacks": [],
+                    },
+                    "workspace": self.workspace_path,
+                    "timeoutSeconds": 300,
+                }
+            },
+            "gateway": {
+                "port": 18789,
+                "mode": "local",
+                "bind": "loopback",
+                "auth": {"mode": "token", "token": "cracker_bench_token"},
+            },
+        }
+
+    def _build_sequrity_config(self, model_id: str) -> dict:
+        """Build openclaw config using Sequrity provider with policy enforcement."""
+        import os
+        seq_api_key = os.getenv("SEQURITY_API_KEY", "")
+        seq_azure_key = os.getenv("SEQURITY_AZURE_KEY", "")
+
+        model_name = model_id.split("/", 1)[1] if "/" in model_id else model_id
+
+        return {
+            "models": {
+                "providers": {
+                    "sequrity": {
+                        "baseUrl": "https://api.sequrity.ai/control/chat/sequrity_azure/v1",
+                        "apiKey": seq_api_key,
+                        "api": "openai-completions",
+                        "authHeader": True,
+                        "headers": {
+                            "X-Features": '{"agent_arch":"dual-llm"}',
+                            "X-Policy": '{"mode": "standard", "presets": {"default_allow": true, "default_allow_enforcement_level": "soft"}}',
+                            "X-Config": '{"fsm":{"enable_multistep_planning":true,"disable_rllm":true,"max_n_turns":50,"max_pllm_steps":50,"max_pllm_failed_steps":10,"history_mismatch_policy":"restart_turn"},"response_format":{"strip_response_content":true}}',
+                            "X-Api-Key": seq_azure_key,
+                        },
+                        "models": [
+                            {
+                                "id": model_name,
+                                "name": f"Sequrity {model_name}",
+                                "reasoning": False,
+                                "input": ["text"],
+                                "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                                "contextWindow": 200000,
+                                "maxTokens": 16384,
+                                "compat": {
+                                    "supportsDeveloperRole": False,
+                                    "supportsUsageInStreaming": False,
+                                    "supportsStrictMode": True,
+                                },
+                            }
+                        ],
+                    }
+                }
+            },
+            "agents": {
+                "defaults": {
+                    "model": {
+                        "primary": f"sequrity/{model_name}",
                         "fallbacks": [],
                     },
                     "workspace": self.workspace_path,
