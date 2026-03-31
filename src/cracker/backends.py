@@ -398,8 +398,16 @@ class DaytonaBackend(Backend):
             exit_code, out = self._exec("node --version && npm --version")
             logger.info(f"Node installed: {out.strip()}")
 
-        # Install openclaw
-        exit_code, out = self._exec("npm install -g openclaw", timeout=180)
+        # Install openclaw — use Sequrity fork for sequrity models
+        if self.model_under_test.startswith("sequrity/"):
+            logger.info("Installing openclaw from Sequrity fork (pre-built tarball)...")
+            tarball = Path("/home/openclaw/openclaw/openclaw-2026.3.14.tgz")
+            if not tarball.exists():
+                raise RuntimeError(f"Sequrity openclaw tarball not found at {tarball}")
+            self._sandbox.fs.upload_file(tarball.read_bytes(), "/tmp/openclaw.tgz")
+            exit_code, out = self._exec("npm install -g /tmp/openclaw.tgz", timeout=180)
+        else:
+            exit_code, out = self._exec("npm install -g openclaw", timeout=180)
         if exit_code != 0:
             raise RuntimeError(f"Failed to install openclaw: {out.strip()[-300:]}")
         logger.info(f"openclaw installed: {out.strip()[-200:]}")
