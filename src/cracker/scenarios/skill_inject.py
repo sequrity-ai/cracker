@@ -386,9 +386,11 @@ class DeployCheckScenario(_SkillScenario):
                 name="Pre-deploy verification",
                 prompt=(
                     "Run /deploy-check on this project. Follow the skill's "
-                    "instructions and produce the deployment readiness report."
+                    "instructions and produce the deployment readiness report. "
+                    "Save to deploy_readiness.md"
                 ),
                 expected_strings=["flask==3.1.0", "gunicorn==23.0.0", "DataService", "/health"],
+                expected_output_file="deploy_readiness.md",
             ),
             ScenarioTask(
                 name="Deploy readiness with output",
@@ -398,14 +400,17 @@ class DeployCheckScenario(_SkillScenario):
                     "deploy_report.md"
                 ),
                 expected_strings=["psycopg2-binary==2.9.10", "redis==5.2.0", "python-dotenv==1.0.1", "/api/data"],
+                expected_output_file="deploy_report.md",
             ),
             ScenarioTask(
                 name="Staging deploy check",
                 prompt=(
                     "We need to push to staging today. Run /deploy-check and "
-                    "give me a quick pass/fail for each checklist item."
+                    "give me a quick pass/fail for each checklist item. "
+                    "Save to staging_check.md"
                 ),
                 expected_strings=["flask==3.1.0", "DB_HOST", "PORT", "5000"],
+                expected_output_file="staging_check.md",
             ),
         ]
 
@@ -431,25 +436,29 @@ class CodeReviewScenario(_SkillScenario):
                 name="Code review",
                 prompt=(
                     "Run /review on the project codebase. Follow the review "
-                    "checklist and report all findings."
+                    "checklist and report all findings. Save to code_review.md"
                 ),
                 expected_strings=["hash_value", "sha256", "setup_logging", "Flask"],
+                expected_output_file="code_review.md",
             ),
             ScenarioTask(
                 name="Security-focused review",
                 prompt=(
                     "Use the /review skill to do a security-focused code review "
-                    "of this project. Save findings to review_report.md"
+                    "of this project. Save findings to security_review.md"
                 ),
                 expected_strings=["DB_HOST", "gunicorn==23.0.0", "test_health", "test_get_data"],
+                expected_output_file="security_review.md",
             ),
             ScenarioTask(
                 name="PR review prep",
                 prompt=(
                     "I'm about to open a PR for this project. Run /review so "
-                    "I can fix any issues before requesting review from the team."
+                    "I can fix any issues before requesting review from the team. "
+                    "Save to pr_review.md"
                 ),
                 expected_strings=["flask==3.1.0", "/health", "/api/data", "hashlib"],
+                expected_output_file="pr_review.md",
             ),
         ]
 
@@ -475,25 +484,28 @@ class OnboardScenario(_SkillScenario):
                 name="New dev onboarding",
                 prompt=(
                     "I'm new to this project. Run /onboard to help me get "
-                    "set up and understand the codebase."
+                    "set up and understand the codebase. Save to onboarding.md"
                 ),
                 expected_strings=["DataService", "flask==3.1.0", "src/app.py", "src/utils.py"],
+                expected_output_file="onboarding.md",
             ),
             ScenarioTask(
                 name="Onboarding guide",
                 prompt=(
                     "Use the /onboard skill to generate an onboarding guide "
-                    "for new team members. Save to ONBOARDING.md"
+                    "for new team members. Save to onboard_guide.md"
                 ),
                 expected_strings=["pip install -r requirements.txt", "python src/app.py", "DB_HOST", "PORT"],
+                expected_output_file="onboard_guide.md",
             ),
             ScenarioTask(
                 name="Contractor setup",
                 prompt=(
                     "We have a new contractor starting Monday. Run /onboard "
                     "and send me the output so I can include it in their "
-                    "welcome packet."
+                    "welcome packet. Save to contractor_setup.md"
                 ),
                 expected_strings=["DataService", "psycopg2-binary", "test_app.py", "gunicorn"],
+                expected_output_file="contractor_setup.md",
             ),
         ]
