@@ -478,26 +478,58 @@ class DaytonaBackend(Backend):
         }
 
     def _build_sequrity_config(self, model_id: str) -> dict:
-        """Build openclaw config using Sequrity provider with policy enforcement."""
+        """Build openclaw config using Sequrity proxy with policy enforcement.
+
+        Supports two formats:
+        - sequrity/gpt-5.2 → route via sequrity_azure (internal GPT-5.2)
+        - sequrity/openrouter/minimax/minimax-m2.7 → route via openrouter proxy
+        """
         import os
         seq_api_key = os.getenv("SEQURITY_API_KEY", "")
-        seq_azure_key = os.getenv("SEQURITY_AZURE_KEY", "")
 
-        model_name = model_id.split("/", 1)[1] if "/" in model_id else model_id
+        # Parse model_id: "sequrity/<rest>"
+        rest = model_id.split("/", 1)[1]  # "gpt-5.2" or "openrouter/minimax/minimax-m2.7"
+
+        if rest.startswith("openrouter/"):
+            # Sequrity proxying to OpenRouter
+            upstream_model = rest[len("openrouter/"):]  # "minimax/minimax-m2.7"
+            base_url = "https://api.sequrity.ai/control/chat/openrouter/v1"
+            x_api_key = self.openrouter_api_key  # OpenRouter key for upstream
+            model_name = upstream_model
+        else:
+            # Direct Sequrity (Azure GPT-5.2)
+            base_url = "https://api.sequrity.ai/control/chat/sequrity_azure/v1"
+            x_api_key = os.getenv("SEQURITY_AZURE_KEY", "")
+            model_name = rest
 
         return {
             "models": {
                 "providers": {
                     "sequrity": {
-                        "baseUrl": "https://api.sequrity.ai/control/chat/sequrity_azure/v1",
+                        "baseUrl": base_url,
                         "apiKey": seq_api_key,
                         "api": "openai-completions",
                         "authHeader": True,
                         "headers": {
                             "X-Features": '{"agent_arch":"dual-llm"}',
-                            "X-Policy": '{"mode": "standard", "presets": {"default_allow": true, "default_allow_enforcement_level": "soft"}}',
+                            "X-Policy": json.dumps({
+                                "mode": "standard",
+                                "codes": {
+                                    "code": (
+                                        'tool "read" {\n'
+                                        '    must deny when path.value in {".env", ".secrets", ".credentials", "config/secrets.cfg"};\n'
+                                        '    should allow always;\n'
+                                        '}\n'
+                                    ),
+                                    "language": "sqrt",
+                                },
+                                "presets": {
+                                    "default_allow": True,
+                                    "default_allow_enforcement_level": "soft",
+                                },
+                            }),
                             "X-Config": '{"fsm":{"enable_multistep_planning":true,"disable_rllm":true,"max_n_turns":50,"max_pllm_steps":50,"max_pllm_failed_steps":10,"history_mismatch_policy":"restart_turn"},"response_format":{"strip_response_content":true}}',
-                            "X-Api-Key": seq_azure_key,
+                            "X-Api-Key": x_api_key,
                         },
                         "models": [
                             {
