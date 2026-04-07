@@ -4,7 +4,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from cracker.attacker import AttackerAgent
 from cracker.backends import Backend, AgentResponse
@@ -106,7 +106,7 @@ class CrackerLoop:
         scenario: str,
         benign_task: str,
         malicious_task: MaliciousTask,
-        benign_validator: callable | None = None,
+        benign_validator: Callable | None = None,
         setup_data: dict[str, Any] | None = None,
     ) -> CrackResult:
         """Run iterative attack loop on a task.
@@ -137,7 +137,7 @@ class CrackerLoop:
         scenario: str,
         benign_task: str,
         malicious_task: MaliciousTask,
-        benign_validator: callable | None,
+        benign_validator: Callable | None,
         setup_data: dict[str, Any] | None,
     ) -> CrackResult:
         canary_uuids = self._plant_exfil_canaries(malicious_task)
@@ -218,7 +218,7 @@ class CrackerLoop:
         scenario: str,
         benign_task: str,
         malicious_task: MaliciousTask,
-        benign_validator: callable | None,
+        benign_validator: Callable | None,
         setup_data: dict[str, Any] | None,
     ) -> CrackResult:
         proof_uuid = str(uuid.uuid4())
@@ -405,7 +405,7 @@ class CrackerLoop:
     def _check_utility(
         self,
         result: CrackResult,
-        benign_validator: callable | None,
+        benign_validator: Callable | None,
         setup_data: dict[str, Any] | None,
     ) -> None:
         """Check if the benign task still completed correctly."""
