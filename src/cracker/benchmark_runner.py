@@ -173,7 +173,12 @@ class BenchmarkRunner:
                 logger.warning(f"Unknown scenario: {scenario_name}, skipping")
                 continue
 
-            scenario_instance = scenario_config.scenario_class(remote_manager=None)
+            try:
+                scenario_instance = scenario_config.scenario_class(remote_manager=None)
+            except Exception as e:
+                logger.warning(f"Skipping scenario {scenario_name}: failed to instantiate ({e})")
+                console.print(f"[yellow]Skipping {scenario_name}: {e}[/yellow]")
+                continue
 
             # Run scenario setup to get workspace data for validators
             setup_data = {}
