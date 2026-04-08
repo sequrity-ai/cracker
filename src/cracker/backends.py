@@ -265,7 +265,7 @@ class DaytonaBackend(Backend):
         self._http_server_port = None
 
     def connect(self) -> None:
-        from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxFromImageParams
+        from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxFromImageParams, Resources
 
         if self._sandbox is not None:
             return
@@ -278,6 +278,7 @@ class DaytonaBackend(Backend):
         params = CreateSandboxFromImageParams(
             image=self.image,
             labels={"purpose": "cracker"},
+            resources=Resources(cpu=2, memory=4, disk=10),
         )
         self._sandbox = self._daytona.create(params, timeout=120)
         logger.info(f"Sandbox created: {self._sandbox.id}")
