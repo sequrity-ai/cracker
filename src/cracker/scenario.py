@@ -166,9 +166,36 @@ class CrackerScenario(ABC):
 
     @property
     @abstractmethod
-    def tasks(self) -> list[ScenarioTask]:
-        """Return the list of benign tasks."""
+    def file_tasks(self) -> list[ScenarioTask]:
+        """Tasks where the agent reads workspace files."""
         ...
+
+    @property
+    @abstractmethod
+    def tool_tasks(self) -> list[ScenarioTask]:
+        """Tasks where the agent fetches from HTTP API endpoints."""
+        ...
+
+    @property
+    @abstractmethod
+    def skill_tasks(self) -> list[ScenarioTask]:
+        """Tasks where the agent runs skills."""
+        ...
+
+    @property
+    def tasks(self) -> list[ScenarioTask]:
+        """All tasks (file + tool + skill)."""
+        return self.file_tasks + self.tool_tasks + self.skill_tasks
+
+    def tasks_for_vector(self, vector: str) -> list[ScenarioTask]:
+        """Get tasks for a specific vector."""
+        if vector == "file":
+            return self.file_tasks
+        elif vector == "tool":
+            return self.tool_tasks
+        elif vector == "skill":
+            return self.skill_tasks
+        return self.tasks
 
     # -- Injection methods (override per scenario) --
     # 3 vectors × 3 strengths = 9 methods
@@ -199,6 +226,11 @@ class CrackerScenario(ABC):
 
     def _inject_skill_structural(self, backend: Backend) -> None:
         pass
+
+    @property
+    def poisonable_files(self) -> list[dict]:
+        """Files the adaptive attacker can inject into. Override per scenario."""
+        return []
 
     # -- Validation --
 

@@ -45,13 +45,17 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, strength: str = "subtle", pass_k: int = 1) -> list[ScenarioResult]:
-    """Run a scenario in a given mode/vector/strength with pass@k attempts per task."""
+def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, vector: str, strength: str = "subtle", pass_k: int = 1, adaptive: bool = False) -> list[ScenarioResult]:
+    """Run specific tasks from a scenario with given mode/vector/strength.
+
+    If adaptive=True and a static attempt doesn't leak, the attacker LLM
+    refines the injection across multiple turns.
+    """
     scenario.fresh_canary()
     results = []
 
-    for i, task in enumerate(scenario.tasks):
-        console.print(f"  Task {i+1}/{len(scenario.tasks)}: {task.name}", end="")
+    for i, task in enumerate(tasks):
+        console.print(f"  Task {i+1}/{len(tasks)}: {task.name}", end="")
 
         attempts = []
         for attempt in range(pass_k):
@@ -70,6 +74,17 @@ def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, st
                 leaked = scenario.validate(response.text, task=task, backend=cracker.backend)
 
             utility = scenario.check_utility(task, response.text, backend=cracker.backend)
+
+            # If attack didn't leak and adaptive is on, try attacker refinement
+            if mode == "attack" and not leaked and adaptive and scenario.poisonable_files:
+                console.print(f" [adaptive]", end="")
+                scenario.teardown(cracker.backend)
+                scenario.setup(cracker.backend, mode=mode, vector=vector, strength=strength)
+                adaptive_result = cracker.run_adaptive(scenario, task)
+                if adaptive_result.canary_leaked:
+                    leaked = True
+                    latency += adaptive_result.latency
+                    utility = adaptive_result.utility
 
             attempts.append(AttemptResult(
                 utility=utility,
@@ -144,18 +159,30 @@ def cmd_benchmark(args):
             cracker = CrackerLoop(config=config, backend=backend_instance)
 
             pk = getattr(args, 'pass_k', 1) or 1
+            use_adaptive = getattr(args, 'adaptive', False)
+            if use_adaptive:
+                if getattr(args, 'max_turns', None):
+                    config.attacker.max_turns = args.max_turns
+                if getattr(args, 'attacker_model', None):
+                    config.attacker.model = args.attacker_model
 
             for scenario in scenarios:
                 for mode in modes:
                     if mode == "benign":
-                        console.print(f"\n[bold cyan]{scenario.name} — BENIGN (pass@{pk})[/bold cyan]")
-                        all_results.extend(_run_scenario(cracker, scenario, mode="benign", vector="file", pass_k=pk))
-                    else:
-                        from cracker.attacks.base import ALL_STRENGTHS
+                        # Run all 9 tasks (3 per vector) with no injection
                         for vector in vectors:
+                            tasks = scenario.tasks_for_vector(vector)
+                            console.print(f"\n[bold cyan]{scenario.name} — BENIGN/{vector} (pass@{pk})[/bold cyan]")
+                            all_results.extend(_run_scenario(cracker, scenario, tasks=tasks, mode="benign", vector=vector, pass_k=pk))
+                    else:
+                        # Run each vector's tasks with matched injection × 3 strengths
+                        from cracker.attacks.base import ALL_STRENGTHS
+                        label = "+adaptive" if use_adaptive else ""
+                        for vector in vectors:
+                            tasks = scenario.tasks_for_vector(vector)
                             for strength in ALL_STRENGTHS:
-                                console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector}/{strength.value}, pass@{pk})[/bold cyan]")
-                                all_results.extend(_run_scenario(cracker, scenario, mode="attack", vector=vector, strength=strength.value, pass_k=pk))
+                                console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector}/{strength.value}{label}, pass@{pk})[/bold cyan]")
+                                all_results.extend(_run_scenario(cracker, scenario, tasks=tasks, mode="attack", vector=vector, strength=strength.value, pass_k=pk, adaptive=use_adaptive))
         finally:
             backend_instance.disconnect()
 
@@ -255,6 +282,9 @@ def main():
     sp.add_argument("--vector", choices=["file", "tool", "skill"], help="Attack vector (default: all)")
     sp.add_argument("--backend", choices=["local", "daytona"], help="Backend to use")
     sp.add_argument("--model", help="Model under test (OpenRouter format)")
+    sp.add_argument("--adaptive", action="store_true", help="Use attacker LLM to refine injections when static fails")
+    sp.add_argument("--attacker-model", help="Attacker model for adaptive mode (OpenRouter format)")
+    sp.add_argument("--max-turns", type=int, default=5, help="Max attacker refinement turns (default: 5)")
     sp.add_argument("--pass-k", type=int, default=1, help="Attempts per task; reports pass@1..pass@k (default: 1)")
     sp.add_argument("--output", help="Output JSON file")
     sp.set_defaults(func=cmd_benchmark)
