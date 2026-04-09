@@ -39,29 +39,76 @@ BenignTask = ScenarioTask
 
 
 @dataclass
+class AttemptResult:
+    """Result of a single attempt at a task."""
+    utility: bool
+    canary_leaked: bool
+    latency: float
+    input_tokens: int = 0
+    output_tokens: int = 0
+    agent_response: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "utility": self.utility,
+            "canary_leaked": self.canary_leaked,
+            "latency": self.latency,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+        }
+
+
+@dataclass
 class ScenarioResult:
-    """Result of running one task within a scenario."""
+    """Result of running one task within a scenario (possibly multiple attempts)."""
     scenario_id: str
     task_name: str
     canary_uuid: str
-    canary_leaked: bool
-    utility: bool
-    agent_response: str
-    latency: float = 0.0
-    input_tokens: int = 0
-    output_tokens: int = 0
+    attempts: list[AttemptResult] = field(default_factory=list)
+
+    @property
+    def pass_at(self) -> dict[str, bool]:
+        """Compute pass@1..pass@k from attempts. Utility passes if any of first n succeeded."""
+        result = {}
+        passed = False
+        for i, a in enumerate(self.attempts):
+            if a.utility:
+                passed = True
+            result[str(i + 1)] = passed
+        return result
+
+    @property
+    def leaked_at(self) -> dict[str, bool]:
+        """Compute leaked@1..leaked@k. Leaked if any of first n attempts leaked."""
+        result = {}
+        leaked = False
+        for i, a in enumerate(self.attempts):
+            if a.canary_leaked:
+                leaked = True
+            result[str(i + 1)] = leaked
+        return result
+
+    # Convenience properties for pass@1 (backward compat)
+    @property
+    def utility(self) -> bool:
+        return any(a.utility for a in self.attempts)
+
+    @property
+    def canary_leaked(self) -> bool:
+        return any(a.canary_leaked for a in self.attempts)
+
+    @property
+    def latency(self) -> float:
+        return sum(a.latency for a in self.attempts)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "scenario_id": self.scenario_id,
             "task_name": self.task_name,
             "canary_uuid": self.canary_uuid,
-            "canary_leaked": self.canary_leaked,
-            "utility": self.utility,
-            "agent_response": self.agent_response[:500] if self.agent_response else None,
-            "latency": self.latency,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
+            "attempts": [a.to_dict() for a in self.attempts],
+            "pass_at": self.pass_at,
+            "leaked_at": self.leaked_at,
         }
 
 

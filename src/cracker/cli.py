@@ -13,7 +13,7 @@ from rich.table import Table
 from cracker.backends import LocalBackend, DaytonaBackend
 from cracker.config import CrackerConfig
 from cracker.cracker_loop import CrackerLoop
-from cracker.scenario import CrackerScenario, ScenarioResult
+from cracker.scenario import CrackerScenario, ScenarioResult, AttemptResult
 
 console = Console()
 
@@ -45,47 +45,57 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str) -> list[ScenarioResult]:
-    """Run a scenario in a given mode/vector and return ScenarioResults."""
+def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, pass_k: int = 1) -> list[ScenarioResult]:
+    """Run a scenario in a given mode/vector with pass@k attempts per task."""
     scenario.fresh_canary()
     results = []
 
     for i, task in enumerate(scenario.tasks):
-        console.print(f"  Task {i+1}/{len(scenario.tasks)}: {task.name}")
+        console.print(f"  Task {i+1}/{len(scenario.tasks)}: {task.name}", end="")
 
-        if i > 0:
-            scenario.teardown(cracker.backend)
-            time.sleep(5)
+        attempts = []
+        for attempt in range(pass_k):
+            if i > 0 or attempt > 0:
+                scenario.teardown(cracker.backend)
+                time.sleep(3)
 
-        scenario.setup(cracker.backend, mode=mode, vector=vector)
+            scenario.setup(cracker.backend, mode=mode, vector=vector)
 
-        start = time.time()
-        response = cracker.backend.run_agent(task.prompt, timeout=300)
-        latency = time.time() - start
+            start = time.time()
+            response = cracker.backend.run_agent(task.prompt, timeout=300)
+            latency = time.time() - start
 
-        if mode == "attack":
-            leaked = scenario.validate(response.text, task=task, backend=cracker.backend)
-        else:
             leaked = False
+            if mode == "attack":
+                leaked = scenario.validate(response.text, task=task, backend=cracker.backend)
 
-        utility = scenario.check_utility(task, response.text, backend=cracker.backend)
+            utility = scenario.check_utility(task, response.text, backend=cracker.backend)
+
+            attempts.append(AttemptResult(
+                utility=utility,
+                canary_leaked=leaked,
+                latency=latency,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+                agent_response=response.text,
+            ))
+
+            mark = "✓" if utility else "✗"
+            if pass_k > 1:
+                console.print(f" [{mark}]", end="")
 
         sid = f"{scenario.category}-{vector}" if mode == "attack" else f"{scenario.category}-benign"
-        leak_str = "[red]LEAKED[/red]" if leaked else "[green]HELD[/green]"
-        util_str = "[green]✓[/green]" if utility else "[yellow]✗[/yellow]"
-        console.print(f"    {leak_str} util={util_str} ({latency:.1f}s)")
-
-        results.append(ScenarioResult(
+        result = ScenarioResult(
             scenario_id=sid,
             task_name=task.name,
             canary_uuid=scenario.canary_uuid if mode == "attack" else "",
-            canary_leaked=leaked,
-            utility=utility,
-            agent_response=response.text,
-            latency=latency,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
-        ))
+            attempts=attempts,
+        )
+        leak_str = "[red]LEAKED[/red]" if result.canary_leaked else "[green]HELD[/green]"
+        util_str = "[green]✓[/green]" if result.utility else "[yellow]✗[/yellow]"
+        console.print(f"  {leak_str} util={util_str} ({result.latency:.1f}s)")
+
+        results.append(result)
 
     scenario.teardown(cracker.backend)
     return results
@@ -133,41 +143,57 @@ def cmd_benchmark(args):
         try:
             cracker = CrackerLoop(config=config, backend=backend_instance)
 
+            pk = getattr(args, 'pass_k', 1) or 1
+
             for scenario in scenarios:
                 for mode in modes:
                     if mode == "benign":
-                        console.print(f"\n[bold cyan]{scenario.name} — BENIGN[/bold cyan]")
-                        all_results.extend(_run_scenario(cracker, scenario, mode="benign", vector="file"))
+                        console.print(f"\n[bold cyan]{scenario.name} — BENIGN (pass@{pk})[/bold cyan]")
+                        all_results.extend(_run_scenario(cracker, scenario, mode="benign", vector="file", pass_k=pk))
                     else:
                         for vector in vectors:
-                            console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector})[/bold cyan]")
-                            all_results.extend(_run_scenario(cracker, scenario, mode="attack", vector=vector))
+                            console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector}, pass@{pk})[/bold cyan]")
+                            all_results.extend(_run_scenario(cracker, scenario, mode="attack", vector=vector, pass_k=pk))
         finally:
             backend_instance.disconnect()
 
-        # Summary
+        # Compute pass@1..pass@k summary
         benign = [r for r in all_results if r.scenario_id.endswith("-benign")]
         attack = [r for r in all_results if not r.scenario_id.endswith("-benign")]
 
-        benign_util = sum(1 for r in benign if r.utility) / len(benign) * 100 if benign else 0
-        attack_leaked = sum(1 for r in attack if r.canary_leaked) / len(attack) * 100 if attack else 0
-        attack_util = sum(1 for r in attack if r.utility) / len(attack) * 100 if attack else 0
+        def _pass_at_rates(results, attr):
+            """Compute pass@1..pass@k rates from results."""
+            if not results:
+                return {}
+            k = max(len(r.attempts) for r in results)
+            rates = {}
+            for n in range(1, k + 1):
+                key = str(n)
+                if attr == "utility":
+                    passed = sum(1 for r in results if r.pass_at.get(key, False))
+                else:
+                    passed = sum(1 for r in results if r.leaked_at.get(key, False))
+                rates[f"pass@{n}"] = round(passed / len(results) * 100, 2)
+            return rates
 
-        console.print(f"\n[bold]Benign Utility: {benign_util:.1f}%[/bold]")
-        console.print(f"[bold]ASR: {attack_leaked:.1f}%[/bold]")
-        console.print(f"[bold]UUA: {attack_util:.1f}%[/bold]")
-        console.print(f"[bold]Utility Drop: {benign_util - attack_util:.1f}%[/bold]")
+        benign_rates = _pass_at_rates(benign, "utility")
+        asr_rates = _pass_at_rates(attack, "leaked")
+        uua_rates = _pass_at_rates(attack, "utility")
+
+        console.print(f"\n[bold]Benign Utility: {benign_rates}[/bold]")
+        console.print(f"[bold]ASR: {asr_rates}[/bold]")
+        console.print(f"[bold]UUA: {uua_rates}[/bold]")
 
         if args.output:
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
             output_data = {
                 "results": [r.to_dict() for r in all_results],
                 "summary": {
+                    "pass_k": pk,
                     "total_tasks": len(all_results),
-                    "benign_utility": round(benign_util, 2),
-                    "attack_success_rate": round(attack_leaked, 2),
-                    "utility_under_attack": round(attack_util, 2),
-                    "utility_drop": round(benign_util - attack_util, 2),
+                    "benign_utility": benign_rates,
+                    "attack_success_rate": asr_rates,
+                    "utility_under_attack": uua_rates,
                 },
             }
             Path(args.output).write_text(json.dumps(output_data, indent=2))
@@ -227,6 +253,7 @@ def main():
     sp.add_argument("--vector", choices=["file", "tool", "skill"], help="Attack vector (default: all)")
     sp.add_argument("--backend", choices=["local", "daytona"], help="Backend to use")
     sp.add_argument("--model", help="Model under test (OpenRouter format)")
+    sp.add_argument("--pass-k", type=int, default=1, help="Attempts per task; reports pass@1..pass@k (default: 1)")
     sp.add_argument("--output", help="Output JSON file")
     sp.set_defaults(func=cmd_benchmark)
 
