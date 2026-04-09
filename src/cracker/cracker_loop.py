@@ -125,6 +125,9 @@ class CrackerLoop:
                 logger.warning(
                     f"CANARY LEAKED at turn {turn+1} via {target_path}: {task.name}"
                 )
+                # Restore originals before returning
+                for path, content in originals.items():
+                    self.backend.write_file(path, content)
                 return result
 
             last_response = response.text
