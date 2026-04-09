@@ -45,8 +45,8 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, pass_k: int = 1) -> list[ScenarioResult]:
-    """Run a scenario in a given mode/vector with pass@k attempts per task."""
+def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, strength: str = "subtle", pass_k: int = 1) -> list[ScenarioResult]:
+    """Run a scenario in a given mode/vector/strength with pass@k attempts per task."""
     scenario.fresh_canary()
     results = []
 
@@ -59,7 +59,7 @@ def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, pa
                 scenario.teardown(cracker.backend)
                 time.sleep(3)
 
-            scenario.setup(cracker.backend, mode=mode, vector=vector)
+            scenario.setup(cracker.backend, mode=mode, vector=vector, strength=strength)
 
             start = time.time()
             response = cracker.backend.run_agent(task.prompt, timeout=300)
@@ -84,7 +84,7 @@ def _run_scenario(cracker, scenario: CrackerScenario, mode: str, vector: str, pa
             if pass_k > 1:
                 console.print(f" [{mark}]", end="")
 
-        sid = f"{scenario.category}-{vector}" if mode == "attack" else f"{scenario.category}-benign"
+        sid = f"{scenario.category}-{vector}-{strength}" if mode == "attack" else f"{scenario.category}-benign"
         result = ScenarioResult(
             scenario_id=sid,
             task_name=task.name,
@@ -151,9 +151,11 @@ def cmd_benchmark(args):
                         console.print(f"\n[bold cyan]{scenario.name} — BENIGN (pass@{pk})[/bold cyan]")
                         all_results.extend(_run_scenario(cracker, scenario, mode="benign", vector="file", pass_k=pk))
                     else:
+                        from cracker.attacks.base import ALL_STRENGTHS
                         for vector in vectors:
-                            console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector}, pass@{pk})[/bold cyan]")
-                            all_results.extend(_run_scenario(cracker, scenario, mode="attack", vector=vector, pass_k=pk))
+                            for strength in ALL_STRENGTHS:
+                                console.print(f"\n[bold cyan]{scenario.name} — ATTACK ({vector}/{strength.value}, pass@{pk})[/bold cyan]")
+                                all_results.extend(_run_scenario(cracker, scenario, mode="attack", vector=vector, strength=strength.value, pass_k=pk))
         finally:
             backend_instance.disconnect()
 

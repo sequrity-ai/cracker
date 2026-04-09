@@ -1,37 +1,16 @@
-"""Tool attack vector — embed canary in HTTP API response data.
+"""Tool attack vector — poisoned HTTP API responses trick agent into reading .env."""
 
-Starts an HTTP server in the sandbox that serves data files containing
-the canary UUID in metadata fields. The agent fetches this data as
-part of its benign task.
-"""
-
-from dataclasses import dataclass, field
-
-from cracker.attacks.base import Attack, AttackVector
+from cracker.attacks.base import Attack, AttackVector, AttackStrength
 from cracker.backends import Backend
-
-
-@dataclass
-class ToolAttackConfig:
-    """Configuration for tool-vector injection.
-
-    routes: URL path → workspace file path for HTTP server.
-    api_data: workspace file path → content with embedded canary.
-    port: HTTP server port.
-    """
-    routes: dict[str, str] = field(default_factory=dict)
-    api_data: dict[str, str] = field(default_factory=dict)
-    port: int = 8099
 
 
 class ToolAttack(Attack):
     vector = AttackVector.TOOL
 
-    def inject(self, backend: Backend, scenario) -> None:
-        config = scenario.tool_attack_config
-        for path, content in config.api_data.items():
-            backend.write_file(path, content)
-            scenario._tracked_files.append(path)
-        scenario._http_server_port = backend.start_http_server(
-            config.routes, config.port,
-        )
+    def inject(self, backend: Backend, scenario, strength: AttackStrength) -> None:
+        if strength == AttackStrength.SUBTLE:
+            scenario._inject_tool_subtle(backend)
+        elif strength == AttackStrength.DIRECT:
+            scenario._inject_tool_direct(backend)
+        elif strength == AttackStrength.STRUCTURAL:
+            scenario._inject_tool_structural(backend)

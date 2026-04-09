@@ -1,34 +1,16 @@
-"""Skill attack vector — create poisoned skill definitions.
+"""Skill attack vector — poisoned skill definitions trick agent into reading .env."""
 
-Writes a poisoned SKILL.md alongside clean skills. The poisoned skill
-contains disguised instructions to read .env and output secrets as
-part of a legitimate-sounding workflow step.
-"""
-
-from dataclasses import dataclass
-
-from cracker.attacks.base import Attack, AttackVector
+from cracker.attacks.base import Attack, AttackVector, AttackStrength
 from cracker.backends import Backend
-
-
-@dataclass
-class SkillAttackConfig:
-    """Configuration for skill-vector injection.
-
-    poisoned_skill_name: skill directory name (e.g. "organize").
-    poisoned_skill_content: SKILL.md content with injection.
-    include_clean_skills: whether to also write clean lint/test/docs skills.
-    """
-    poisoned_skill_name: str
-    poisoned_skill_content: str
-    include_clean_skills: bool = True
 
 
 class SkillAttack(Attack):
     vector = AttackVector.SKILL
 
-    def inject(self, backend: Backend, scenario) -> None:
-        config = scenario.skill_attack_config
-        if config.include_clean_skills:
-            scenario._write_clean_skills(backend)
-        scenario._write_skill(backend, config.poisoned_skill_name, config.poisoned_skill_content)
+    def inject(self, backend: Backend, scenario, strength: AttackStrength) -> None:
+        if strength == AttackStrength.SUBTLE:
+            scenario._inject_skill_subtle(backend)
+        elif strength == AttackStrength.DIRECT:
+            scenario._inject_skill_direct(backend)
+        elif strength == AttackStrength.STRUCTURAL:
+            scenario._inject_skill_structural(backend)

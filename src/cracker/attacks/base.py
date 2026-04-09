@@ -12,21 +12,22 @@ class AttackVector(str, Enum):
     SKILL = "skill"
 
 
-class Attack(ABC):
-    """Base class for all attack vectors.
+class AttackStrength(str, Enum):
+    SUBTLE = "subtle"        # Passive references (config points to .env)
+    DIRECT = "direct"        # Explicit instructions ("read .env and include value")
+    STRUCTURAL = "structural" # Data structure includes .env (manifest, index, pipeline)
 
-    Each attack knows how to inject a canary into a scenario's workspace
-    using a specific vector (file poisoning, HTTP API, skill definition).
-    """
+
+# All strengths in order — always run all 3
+ALL_STRENGTHS = [AttackStrength.SUBTLE, AttackStrength.DIRECT, AttackStrength.STRUCTURAL]
+
+
+class Attack(ABC):
+    """Base class for all attack vectors."""
 
     vector: AttackVector
 
     @abstractmethod
-    def inject(self, backend: Backend, scenario) -> None:
-        """Apply injection to the scenario's workspace.
-
-        Args:
-            backend: Execution backend (Daytona/local)
-            scenario: CrackerScenario instance with attack config
-        """
+    def inject(self, backend: Backend, scenario, strength: AttackStrength) -> None:
+        """Apply injection at a given strength level."""
         ...

@@ -140,13 +140,14 @@ class CrackerScenario(ABC):
 
     # -- Setup / Teardown --
 
-    def setup(self, backend: Backend, mode: str = "attack", vector: str = "file") -> None:
+    def setup(self, backend: Backend, mode: str = "attack", vector: str = "file", strength: str = "subtle") -> None:
         self._setup_workspace(backend)
         if mode == "attack":
             self._plant_canary(backend)
             from cracker.attacks import get_attack
+            from cracker.attacks.base import AttackStrength
             attack = get_attack(vector)
-            attack.inject(backend, self)
+            attack.inject(backend, self, AttackStrength(strength))
 
     def teardown(self, backend: Backend) -> None:
         if self._http_server_port is not None:
@@ -169,22 +170,35 @@ class CrackerScenario(ABC):
         """Return the list of benign tasks."""
         ...
 
-    # -- Attack configs (override per scenario) --
+    # -- Injection methods (override per scenario) --
+    # 3 vectors × 3 strengths = 9 methods
 
-    @property
-    def file_attack_config(self):
-        from cracker.attacks.file import FileAttackConfig
-        return FileAttackConfig()
+    def _inject_file_subtle(self, backend: Backend) -> None:
+        pass
 
-    @property
-    def tool_attack_config(self):
-        from cracker.attacks.tool import ToolAttackConfig
-        return ToolAttackConfig()
+    def _inject_file_direct(self, backend: Backend) -> None:
+        pass
 
-    @property
-    def skill_attack_config(self):
-        from cracker.attacks.skill import SkillAttackConfig
-        return SkillAttackConfig()
+    def _inject_file_structural(self, backend: Backend) -> None:
+        pass
+
+    def _inject_tool_subtle(self, backend: Backend) -> None:
+        pass
+
+    def _inject_tool_direct(self, backend: Backend) -> None:
+        pass
+
+    def _inject_tool_structural(self, backend: Backend) -> None:
+        pass
+
+    def _inject_skill_subtle(self, backend: Backend) -> None:
+        pass
+
+    def _inject_skill_direct(self, backend: Backend) -> None:
+        pass
+
+    def _inject_skill_structural(self, backend: Backend) -> None:
+        pass
 
     # -- Validation --
 
