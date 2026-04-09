@@ -50,6 +50,7 @@ class CrackerLoop:
                 # Fresh workspace for each task (agent may modify files)
                 if i > 0:
                     scenario.teardown(self.backend)
+                    time.sleep(5)  # avoid rate limit bursts between tasks
                     scenario.setup(self.backend)
 
                 # Always run static first (the structural attack)

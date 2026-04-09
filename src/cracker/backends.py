@@ -573,64 +573,101 @@ class DaytonaBackend(Backend):
         self._session_counter += 1
         return f"cracker-{int(time.time())}-{self._session_counter}"
 
+    _RATE_LIMIT_PATTERNS = ["rate limit", "429", "rate_limit", "temporarily rate-limited"]
+    _MAX_RETRIES = 3
+    _BASE_DELAY = 30  # seconds
+
+    @staticmethod
+    def _is_rate_limited(text: str) -> bool:
+        lower = text.lower()
+        return any(p in lower for p in DaytonaBackend._RATE_LIMIT_PATTERNS)
+
     def run_agent(self, prompt: str, timeout: int = 300) -> AgentResponse:
-        """Run openclaw agent inside the Daytona sandbox."""
-        start_time = time.time()
-        session_id = self._new_session_id()
+        """Run openclaw agent inside the Daytona sandbox with rate-limit retry."""
+        overall_start = time.time()
 
-        cmd = (
-            f"openclaw agent --agent main "
-            f"--session-id {session_id} "
-            f"--message {json.dumps(prompt)} "
-            f"--json --timeout {timeout}"
-        )
-        logger.debug(f"Running in sandbox: openclaw agent --message '{prompt[:80]}...'")
+        for attempt in range(self._MAX_RETRIES + 1):
+            start_time = time.time()
+            session_id = self._new_session_id()
 
-        try:
-            exit_code, stdout = self._exec(cmd, timeout=timeout + 60)
-            latency = time.time() - start_time
+            cmd = (
+                f"openclaw agent --agent main "
+                f"--session-id {session_id} "
+                f"--message {json.dumps(prompt)} "
+                f"--json --timeout {timeout}"
+            )
+            logger.debug(f"Running in sandbox: openclaw agent --message '{prompt[:80]}...'")
 
-            if not stdout or not stdout.strip():
-                return AgentResponse(
-                    text="", success=False, latency=latency, error="Empty response from agent"
-                )
-
-            # Parse JSON (may have non-JSON lines before it)
             try:
-                data = json.loads(stdout)
-            except json.JSONDecodeError:
-                json_start = stdout.find("{")
-                if json_start >= 0:
-                    try:
-                        data = json.loads(stdout[json_start:])
-                    except json.JSONDecodeError:
-                        return AgentResponse(
-                            text=stdout, success=False, latency=latency,
-                            error=f"Failed to parse response",
+                exit_code, stdout = self._exec(cmd, timeout=timeout + 60)
+                latency = time.time() - start_time
+
+                if not stdout or not stdout.strip():
+                    if attempt < self._MAX_RETRIES:
+                        delay = self._BASE_DELAY * (2 ** attempt)
+                        logger.warning(
+                            f"Empty response (attempt {attempt+1}/{self._MAX_RETRIES+1}), "
+                            f"retrying in {delay}s..."
                         )
-                else:
+                        time.sleep(delay)
+                        continue
                     return AgentResponse(
-                        text=stdout, success=False, latency=latency, error="No JSON in response",
+                        text="", success=False, latency=latency, error="Empty response from agent"
                     )
 
-            # Extract response text (same format as local backend)
-            text = LocalBackend._extract_response_text(data)
-            meta = data.get("meta", {})
-            usage = meta.get("agentMeta", {}).get("usage", {})
+                # Parse JSON (may have non-JSON lines before it)
+                try:
+                    data = json.loads(stdout)
+                except json.JSONDecodeError:
+                    json_start = stdout.find("{")
+                    if json_start >= 0:
+                        try:
+                            data = json.loads(stdout[json_start:])
+                        except json.JSONDecodeError:
+                            return AgentResponse(
+                                text=stdout, success=False, latency=latency,
+                                error=f"Failed to parse response",
+                            )
+                    else:
+                        return AgentResponse(
+                            text=stdout, success=False, latency=latency, error="No JSON in response",
+                        )
 
-            return AgentResponse(
-                text=text,
-                success=True,
-                latency=latency,
-                input_tokens=usage.get("input", 0),
-                output_tokens=usage.get("output", 0),
-                cache_read_tokens=usage.get("cacheRead", 0),
-            )
+                # Extract response text (same format as local backend)
+                text = LocalBackend._extract_response_text(data)
 
-        except Exception as e:
-            return AgentResponse(
-                text="", success=False, latency=time.time() - start_time, error=str(e),
-            )
+                # Retry on rate limit
+                if attempt < self._MAX_RETRIES and self._is_rate_limited(text):
+                    delay = self._BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limited (attempt {attempt+1}/{self._MAX_RETRIES+1}), "
+                        f"retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+                    continue
+
+                meta = data.get("meta", {})
+                usage = meta.get("agentMeta", {}).get("usage", {})
+
+                return AgentResponse(
+                    text=text,
+                    success=True,
+                    latency=time.time() - overall_start,
+                    input_tokens=usage.get("input", 0),
+                    output_tokens=usage.get("output", 0),
+                    cache_read_tokens=usage.get("cacheRead", 0),
+                )
+
+            except Exception as e:
+                return AgentResponse(
+                    text="", success=False, latency=time.time() - overall_start, error=str(e),
+                )
+
+        # All retries exhausted
+        return AgentResponse(
+            text="", success=False, latency=time.time() - overall_start,
+            error=f"Rate limited after {self._MAX_RETRIES + 1} attempts",
+        )
 
     def write_file(self, file_path: str, content: str) -> bool:
         try:
