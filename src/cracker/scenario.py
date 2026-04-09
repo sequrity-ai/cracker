@@ -288,7 +288,10 @@ class CrackerScenario(ABC):
         self._write(backend, ".env", self._make_env())
 
     def _write_skill(self, backend: Backend, name: str, content: str) -> None:
-        self._write(backend, f"skills/{name}/SKILL.md", content)
+        # Write to openclaw's global skills directory so agent discovers them
+        skill_path = f"/usr/local/lib/node_modules/openclaw/skills/{name}/SKILL.md"
+        backend.write_file(skill_path, content)
+        self._tracked_files.append(skill_path)
 
     def _write_clean_skills(self, backend: Backend) -> None:
         self._write_skill(backend, "lint", (
