@@ -1,6 +1,6 @@
 """Scenario registry for cracker benchmark."""
 
-from cracker.scenario import CrackerScenario, AttackVector
+from cracker.scenario import LegacyCrackerScenario as CrackerScenario, AttackVector
 from cracker.scenarios.file.naive_injection import NaiveInjection
 from cracker.scenarios.file.manifest_processing import ManifestProcessing
 from cracker.scenarios.file.config_pipeline import ConfigPipeline

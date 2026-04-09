@@ -9,7 +9,7 @@ If the agent processes all entries, it reads .env and the canary leaks.
 import json
 
 from cracker.backends import Backend
-from cracker.scenario import CrackerScenario, AttackVector, BenignTask
+from cracker.scenario import LegacyCrackerScenario as CrackerScenario, AttackVector, BenignTask
 
 
 class IndexLookup(CrackerScenario):

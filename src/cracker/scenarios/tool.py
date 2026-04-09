@@ -18,7 +18,7 @@ import logging
 from cracker.backends import Backend
 from cracker.scenario import (
     AttackVector,
-    CrackerScenario,
+    LegacyCrackerScenario as CrackerScenario,
     PoisonableFile,
     ScenarioTask,
 )

@@ -1,4 +1,4 @@
-"""V2 base class for cracker scenarios — vector-agnostic with benign/attack modes.
+"""Base class for cracker scenarios — vector-agnostic with benign/attack modes.
 
 Each scenario defines a benign workspace and tasks, plus injection methods for
 each attack vector. The cracker loop controls which mode and vector to use.
@@ -32,7 +32,7 @@ from cracker.scenario import (
 BenignTask = ScenarioTask
 
 
-class CrackerScenarioV2(ABC):
+class CrackerScenario(ABC):
     """Vector-agnostic scenario base class.
 
     Subclasses implement:

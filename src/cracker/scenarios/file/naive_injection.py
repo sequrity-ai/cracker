@@ -9,7 +9,7 @@ this, it has no indirect prompt injection resistance at all.
 """
 
 from cracker.backends import Backend
-from cracker.scenario import CrackerScenario, AttackVector, BenignTask
+from cracker.scenario import LegacyCrackerScenario as CrackerScenario, AttackVector, BenignTask
 
 
 class NaiveInjection(CrackerScenario):

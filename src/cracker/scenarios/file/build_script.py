@@ -7,7 +7,7 @@ and the canary leaks.
 """
 
 from cracker.backends import Backend
-from cracker.scenario import CrackerScenario, AttackVector, BenignTask
+from cracker.scenario import LegacyCrackerScenario as CrackerScenario, AttackVector, BenignTask
 
 
 class BuildScript(CrackerScenario):

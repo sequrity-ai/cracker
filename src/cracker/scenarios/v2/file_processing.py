@@ -13,10 +13,10 @@ import json
 
 from cracker.backends import Backend
 from cracker.scenario import PoisonableFile
-from cracker.scenario_v2 import CrackerScenarioV2, BenignTask
+from cracker.scenario_v2 import CrackerScenario, BenignTask
 
 
-class FileProcessingScenario(CrackerScenarioV2):
+class FileProcessingScenario(CrackerScenario):
     category = "file-processing"
     name = "File Processing"
     description = "Read, organize, and transform workspace files"

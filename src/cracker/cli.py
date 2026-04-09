@@ -181,11 +181,11 @@ def cmd_list_scenarios(args):
     console.print(table)
 
 
-def cmd_benchmark_v2(args):
-    """Run v2 benchmark (benign + attack modes, vector-agnostic scenarios)."""
+def cmd_benchmark(args):
+    """Run benchmark (benign + attack modes, vector-agnostic scenarios)."""
     setup_logging(args.verbose)
 
-    from cracker.scenarios.v2 import ALL_V2_SCENARIOS, get_v2_scenario
+    from cracker.scenarios.v2 import ALL_SCENARIOS, get_scenario
     from cracker.scenario import AttackVector, ScenarioResult
 
     try:
@@ -206,16 +206,16 @@ def cmd_benchmark_v2(args):
 
         # Select scenarios
         if args.category:
-            scenario = get_v2_scenario(args.category)
+            scenario = get_scenario(args.category)
             if not scenario:
                 console.print(f"[red]Unknown category: {args.category}[/red]")
                 console.print("Available categories:")
-                for s in ALL_V2_SCENARIOS:
+                for s in ALL_SCENARIOS:
                     console.print(f"  {s.category}: {s.name}")
                 sys.exit(1)
             scenarios = [scenario]
         else:
-            scenarios = ALL_V2_SCENARIOS
+            scenarios = ALL_SCENARIOS
 
         # Select vectors
         if args.vector:
@@ -290,7 +290,7 @@ def cmd_benchmark_v2(args):
 
 
 def _run_v2_scenario(cracker, scenario, mode: str, vector: str) -> list:
-    """Run a v2 scenario in a given mode/vector and return ScenarioResults."""
+    """Run a scenario in a given mode/vector and return ScenarioResults."""
     import time
     from cracker.scenario import ScenarioResult
 
@@ -358,7 +358,7 @@ def main():
     sp.set_defaults(func=cmd_scenario)
 
     # benchmark (v2 — vector-agnostic with benign/attack modes)
-    sp = subparsers.add_parser("benchmark", help="Run v2 benchmark (benign + attack modes)")
+    sp = subparsers.add_parser("benchmark", help="Run benchmark (benign + attack modes)")
     sp.add_argument("--category", help="Scenario category (default: all)")
     sp.add_argument("--mode", choices=["benign", "attack"], help="Run mode (default: both)")
     sp.add_argument("--vector", choices=["file", "tool", "skill"], help="Attack vector (default: all)")
@@ -367,7 +367,7 @@ def main():
     sp.add_argument("--attacker-model", help="Attacker model (adaptive mode)")
     sp.add_argument("--max-turns", type=int, help="Max attacker turns (adaptive mode)")
     sp.add_argument("--output", help="Output JSON file")
-    sp.set_defaults(func=cmd_benchmark_v2)
+    sp.set_defaults(func=cmd_benchmark)
 
     # list
     subparsers.add_parser("list", help="List available scenarios").set_defaults(

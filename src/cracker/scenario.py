@@ -90,7 +90,7 @@ class ScenarioResult:
         }
 
 
-class CrackerScenario(ABC):
+class LegacyCrackerScenario(ABC):
     """Base class for all cracker attack scenarios."""
 
     id: str
