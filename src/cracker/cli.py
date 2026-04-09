@@ -268,6 +268,7 @@ def cmd_benchmark_v2(args):
 
         if args.output:
             import json
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
             output_data = {
                 "results": [r.to_dict() for r in all_results],
                 "summary": {
