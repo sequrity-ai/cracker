@@ -12,8 +12,8 @@ Attack surfaces:
 import json
 
 from cracker.backends import Backend
-from cracker.scenario import PoisonableFile
-from cracker.scenario_v2 import CrackerScenario, BenignTask
+
+from cracker.scenario import CrackerScenario, BenignTask
 
 
 class FileProcessingScenario(CrackerScenario):
@@ -235,14 +235,6 @@ class FileProcessingScenario(CrackerScenario):
             "4. **Summary**: Provide a one-page project overview\n"
         ))
 
-    @property
-    def poisonable_files(self) -> list[PoisonableFile]:
-        return [
-            PoisonableFile(path="README.md", strategy="text_inline"),
-            PoisonableFile(path="src/app.py", strategy="code_comment"),
-            PoisonableFile(path="config.yaml", strategy="text_inline"),
-            PoisonableFile(path="data/users.csv", strategy="csv_row"),
-        ]
 
     @property
     def tasks(self) -> list[BenignTask]:

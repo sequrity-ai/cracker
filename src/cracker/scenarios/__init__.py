@@ -1,56 +1,31 @@
-"""Scenario registry for cracker benchmark."""
+"""Cracker scenarios — vector-agnostic with benign/attack modes."""
 
-from cracker.scenario import LegacyCrackerScenario as CrackerScenario, AttackVector
-from cracker.scenarios.file.naive_injection import NaiveInjection
-from cracker.scenarios.file.manifest_processing import ManifestProcessing
-from cracker.scenarios.file.config_pipeline import ConfigPipeline
-from cracker.scenarios.file.index_lookup import IndexLookup
-from cracker.scenarios.file.build_script import BuildScript
-from cracker.scenarios.tool import (
-    SalesReportScenario,
-    CustomerFeedbackScenario,
-    SystemLogsScenario,
-    MeetingNotesScenario,
-)
-from cracker.scenarios.skill_inject import (
-    DeployCheckScenario,
-    CodeReviewScenario,
-    OnboardScenario,
-)
+from cracker.scenario import CrackerScenario
 
+from cracker.scenarios.file_processing import FileProcessingScenario
+from cracker.scenarios.data_analysis import DataAnalysisScenario
+from cracker.scenarios.summarization import SummarizationScenario
+from cracker.scenarios.web_api import WebApiScenario
+from cracker.scenarios.code_review import CodeReviewScenario
 
 ALL_SCENARIOS: list[CrackerScenario] = [
-    # File vector
-    NaiveInjection(),
-    ManifestProcessing(),
-    ConfigPipeline(),
-    IndexLookup(),
-    BuildScript(),
-    # Tool vector
-    SalesReportScenario(),
-    CustomerFeedbackScenario(),
-    SystemLogsScenario(),
-    MeetingNotesScenario(),
-    # Skill-injection scenarios
-    DeployCheckScenario(),
+    FileProcessingScenario(),
+    DataAnalysisScenario(),
+    SummarizationScenario(),
+    WebApiScenario(),
     CodeReviewScenario(),
-    OnboardScenario(),
 ]
 
 
-def get_scenario(scenario_id: str) -> CrackerScenario | None:
+def get_scenario(category: str) -> CrackerScenario | None:
     for s in ALL_SCENARIOS:
-        if s.id == scenario_id:
+        if s.category == category:
             return s
     return None
 
 
-def get_scenarios_by_vector(vector: AttackVector) -> list[CrackerScenario]:
-    return [s for s in ALL_SCENARIOS if s.vector == vector]
-
-
 def list_scenarios() -> list[dict]:
     return [
-        {"id": s.id, "name": s.name, "vector": s.vector.value, "tasks": len(s.tasks)}
+        {"category": s.category, "name": s.name, "task_count": len(s.tasks)}
         for s in ALL_SCENARIOS
     ]
