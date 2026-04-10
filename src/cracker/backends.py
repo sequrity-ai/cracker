@@ -467,7 +467,7 @@ class DaytonaBackend(Backend):
                         "fallbacks": [],
                     },
                     "workspace": self.workspace_path,
-                    "timeoutSeconds": 300,
+                    "timeoutSeconds": 600,
                 }
             },
             "gateway": {
@@ -558,7 +558,7 @@ class DaytonaBackend(Backend):
                         "fallbacks": [],
                     },
                     "workspace": self.workspace_path,
-                    "timeoutSeconds": 300,
+                    "timeoutSeconds": 600,
                 }
             },
             "gateway": {
@@ -671,7 +671,7 @@ class DaytonaBackend(Backend):
 
     def write_file(self, file_path: str, content: str) -> bool:
         try:
-            full_path = f"{self.workspace_path}/{file_path}"
+            full_path = file_path if file_path.startswith("/") else f"{self.workspace_path}/{file_path}"
             self._exec(f"mkdir -p $(dirname {full_path})")
             self._sandbox.fs.upload_file(content.encode("utf-8"), full_path)
             logger.info(f"Wrote {full_path}")
@@ -682,7 +682,7 @@ class DaytonaBackend(Backend):
 
     def read_file(self, file_path: str) -> str | None:
         try:
-            full_path = f"{self.workspace_path}/{file_path}"
+            full_path = file_path if file_path.startswith("/") else f"{self.workspace_path}/{file_path}"
             data = self._sandbox.fs.download_file(full_path)
             if data is not None:
                 return data.decode("utf-8")
@@ -692,14 +692,16 @@ class DaytonaBackend(Backend):
 
     def file_exists(self, file_path: str) -> bool:
         try:
-            exit_code, _ = self._exec(f"test -f {self.workspace_path}/{file_path}")
+            full_path = file_path if file_path.startswith("/") else f"{self.workspace_path}/{file_path}"
+            exit_code, _ = self._exec(f"test -f {full_path}")
             return exit_code == 0
         except Exception:
             return False
 
     def delete_file(self, file_path: str) -> bool:
         try:
-            self._exec(f"rm -f {self.workspace_path}/{file_path}")
+            full_path = file_path if file_path.startswith("/") else f"{self.workspace_path}/{file_path}"
+            self._exec(f"rm -f {full_path}")
             return True
         except Exception:
             return False

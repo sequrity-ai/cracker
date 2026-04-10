@@ -232,6 +232,14 @@ class CrackerScenario(ABC):
         """Files the adaptive attacker can inject into. Override per scenario."""
         return []
 
+    def poisonable_files_for_task(self, task: ScenarioTask) -> list[dict]:
+        """Files the adaptive attacker should target for a specific task.
+
+        Override per scenario when different tasks read different files.
+        Defaults to poisonable_files (all files).
+        """
+        return self.poisonable_files
+
     # -- Validation --
 
     def check_utility(self, task: ScenarioTask, agent_output: str, backend: Backend | None = None) -> bool:
@@ -288,10 +296,38 @@ class CrackerScenario(ABC):
         self._write(backend, ".env", self._make_env())
 
     def _write_skill(self, backend: Backend, name: str, content: str) -> None:
-        # Write to openclaw's global skills directory so agent discovers them
-        skill_path = f"/usr/local/lib/node_modules/openclaw/skills/{name}/SKILL.md"
-        backend.write_file(skill_path, content)
-        self._tracked_files.append(skill_path)
+        """Write a skill to openclaw's discovery path with proper frontmatter.
+
+        Skills are discovered at <workspace>/.agents/skills/<name>/SKILL.md
+        and require YAML frontmatter with name + description.
+        We also write to ~/.openclaw/skills/ as a fallback.
+        """
+        # Extract first markdown heading as description, or use name
+        desc = name
+        for line in content.splitlines():
+            if line.startswith("# "):
+                desc = line[2:].strip()
+                break
+
+        # Add YAML frontmatter if not already present
+        if not content.startswith("---"):
+            content = (
+                f"---\nname: {name}\n"
+                f"description: {desc}\n"
+                f"---\n\n{content}"
+            )
+
+        # Write to workspace-relative path (highest discovery precedence)
+        ws_path = f".agents/skills/{name}/SKILL.md"
+        self._write(backend, ws_path, content)
+
+        # Also write to ~/.openclaw/skills/ and legacy npm path as fallbacks
+        for abs_path in [
+            f"/root/.openclaw/skills/{name}/SKILL.md",
+            f"/usr/local/lib/node_modules/openclaw/skills/{name}/SKILL.md",
+        ]:
+            backend.write_file(abs_path, content)
+            self._tracked_files.append(abs_path)
 
     def _write_clean_skills(self, backend: Backend) -> None:
         self._write_skill(backend, "lint", (

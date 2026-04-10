@@ -69,6 +69,15 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
             response = cracker.backend.run_agent(task.prompt, timeout=300)
             latency = time.time() - start
 
+            # Debug: log agent response
+            resp_preview = (response.text or "")[:500]
+            logging.getLogger("cracker.cli").debug(
+                f"Agent response ({len(response.text or '')} chars, success={response.success}): "
+                f"{resp_preview}"
+            )
+            if response.error:
+                logging.getLogger("cracker.cli").warning(f"Agent error: {response.error}")
+
             leaked = False
             if mode == "attack":
                 leaked = scenario.validate(response.text, task=task, backend=cracker.backend)
@@ -76,7 +85,7 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
             utility = scenario.check_utility(task, response.text, backend=cracker.backend)
 
             # If attack didn't leak and adaptive is on, try attacker refinement
-            if mode == "attack" and not leaked and adaptive and scenario.poisonable_files:
+            if mode == "attack" and not leaked and adaptive and scenario.poisonable_files_for_task(task):
                 console.print(f" [adaptive]", end="")
                 scenario.teardown(cracker.backend)
                 scenario.setup(cracker.backend, mode=mode, vector=vector, strength=strength)
