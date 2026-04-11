@@ -85,6 +85,9 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
             utility = scenario.check_utility(task, response.text, backend=cracker.backend)
 
             # If attack didn't leak and adaptive is on, try attacker refinement
+            attacker_input = attacker_cached = attacker_output = 0
+            attacker_cost = 0.0
+            attacker_model = ""
             if mode == "attack" and not leaked and adaptive and scenario.poisonable_files_for_task(task):
                 console.print(f" [adaptive]", end="")
                 scenario.teardown(cracker.backend)
@@ -94,6 +97,13 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
                     leaked = True
                     latency += adaptive_result.latency
                     utility = adaptive_result.utility
+                if adaptive_result.attempts:
+                    a = adaptive_result.attempts[0]
+                    attacker_input = a.attacker_input_tokens
+                    attacker_cached = a.attacker_cached_tokens
+                    attacker_output = a.attacker_output_tokens
+                    attacker_cost = a.attacker_cost_usd
+                    attacker_model = a.attacker_model
 
             attempts.append(AttemptResult(
                 utility=utility,
@@ -101,7 +111,13 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
                 latency=latency,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
+                mut_cost_usd=response.cost_usd,
                 agent_response=response.text,
+                attacker_input_tokens=attacker_input,
+                attacker_cached_tokens=attacker_cached,
+                attacker_output_tokens=attacker_output,
+                attacker_cost_usd=attacker_cost,
+                attacker_model=attacker_model,
             ))
 
             mark = "✓" if utility else "✗"
@@ -218,9 +234,24 @@ def cmd_benchmark(args):
         asr_rates = _pass_at_rates(attack, "leaked")
         uua_rates = _pass_at_rates(attack, "utility")
 
+        all_attempts = [a for r in all_results for a in r.attempts]
+        mut_input = sum(a.input_tokens for a in all_attempts)
+        mut_output = sum(a.output_tokens for a in all_attempts)
+        mut_cost = sum(a.mut_cost_usd for a in all_attempts)
+        att_input = sum(a.attacker_input_tokens for a in all_attempts)
+        att_cached = sum(a.attacker_cached_tokens for a in all_attempts)
+        att_output = sum(a.attacker_output_tokens for a in all_attempts)
+        att_cost = sum(a.attacker_cost_usd for a in all_attempts)
+        attacker_models = list({a.attacker_model for a in all_attempts if a.attacker_model})
+
         console.print(f"\n[bold]Benign Utility: {benign_rates}[/bold]")
         console.print(f"[bold]ASR: {asr_rates}[/bold]")
         console.print(f"[bold]UUA: {uua_rates}[/bold]")
+        console.print(f"\n[bold]Token usage:[/bold]")
+        console.print(f"  MUT      — in: {mut_input:,}  out: {mut_output:,}  cost: ${mut_cost:.4f}")
+        console.print(f"  Attacker — in: {att_input:,}  cached: {att_cached:,}  out: {att_output:,}  cost: ${att_cost:.4f}")
+        if attacker_models:
+            console.print(f"  Attacker model(s) served: {', '.join(attacker_models)}")
 
         if args.output:
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -232,6 +263,16 @@ def cmd_benchmark(args):
                     "benign_utility": benign_rates,
                     "attack_success_rate": asr_rates,
                     "utility_under_attack": uua_rates,
+                    "tokens": {
+                        "mut_input": mut_input,
+                        "mut_output": mut_output,
+                        "mut_cost_usd": round(mut_cost, 6),
+                        "attacker_input": att_input,
+                        "attacker_cached": att_cached,
+                        "attacker_output": att_output,
+                        "attacker_cost_usd": round(att_cost, 6),
+                        "attacker_models_served": attacker_models,
+                    },
                 },
             }
             Path(args.output).write_text(json.dumps(output_data, indent=2))

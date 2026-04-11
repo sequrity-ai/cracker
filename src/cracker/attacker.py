@@ -18,6 +18,11 @@ class AttackResult:
     injection_payload: str
     stopped: bool
     turn: int
+    input_tokens: int = 0
+    cached_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    model_served: str = ""
 
 
 class AttackerAgent:
@@ -105,6 +110,13 @@ class AttackerAgent:
 
         logger.info(f"Attacker turn {turn + 1}/{self.config.max_turns}")
 
+        # Accumulated token counts across all API calls in this turn
+        total_input = 0
+        total_cached = 0
+        total_output = 0
+        total_cost = 0.0
+        model_served = ""
+
         try:
             response = self.client.chat.completions.create(
                 model=self.config.model,
@@ -116,6 +128,10 @@ class AttackerAgent:
                 top_p=self.config.top_p,
                 max_tokens=2000,
             )
+            inp, cac, out, cost, ms = _extract_usage(response)
+            total_input += inp; total_cached += cac; total_output += out; total_cost += cost
+            if ms:
+                model_served = ms
 
             msg = response.choices[0].message
             raw_content = msg.content or ""
@@ -143,6 +159,10 @@ class AttackerAgent:
                     top_p=self.config.top_p,
                     max_tokens=2000,
                 )
+                inp, cac, out, cost, ms = _extract_usage(retry)
+                total_input += inp; total_cached += cac; total_output += out; total_cost += cost
+                if ms:
+                    model_served = ms
                 retry_raw = retry.choices[0].message.content or getattr(retry.choices[0].message, "reasoning", None) or ""
                 self.conversation_history.append({"role": "assistant", "content": retry_raw})
                 injection_payload = _extract_payload(retry_raw)
@@ -173,6 +193,10 @@ class AttackerAgent:
                     top_p=self.config.top_p,
                     max_tokens=2000,
                 )
+                inp, cac, out, cost, ms = _extract_usage(retry)
+                total_input += inp; total_cached += cac; total_output += out; total_cost += cost
+                if ms:
+                    model_served = ms
                 retry_raw = retry.choices[0].message.content or ""
                 injection_payload = _extract_payload(retry_raw) or retry_raw.strip()
                 self.conversation_history.append({"role": "assistant", "content": injection_payload})
@@ -180,15 +204,38 @@ class AttackerAgent:
                 # If it STOPs again, just mark it and let the loop handle it
                 if injection_payload.upper() == "STOP":
                     logger.warning("Attacker insists on stopping")
-                    return AttackResult(injection_payload=injection_payload, stopped=True, turn=turn)
+                    return AttackResult(
+                        injection_payload=injection_payload, stopped=True, turn=turn,
+                        input_tokens=total_input, cached_tokens=total_cached,
+                        output_tokens=total_output, cost_usd=total_cost, model_served=model_served,
+                    )
 
             logger.info(f"Generated injection payload:\n--- PAYLOAD ---\n{injection_payload}\n--- END PAYLOAD ---")
-            return AttackResult(injection_payload=injection_payload, stopped=False, turn=turn)
+            return AttackResult(
+                injection_payload=injection_payload, stopped=False, turn=turn,
+                input_tokens=total_input, cached_tokens=total_cached,
+                output_tokens=total_output, cost_usd=total_cost, model_served=model_served,
+            )
 
         except Exception as e:
             logger.error(f"Failed to generate injection: {e}")
             # Skip this turn rather than inject an obvious red-flag payload
             return AttackResult(injection_payload="", stopped=True, turn=turn)
+
+
+def _extract_usage(response) -> tuple[int, int, int, float, str]:
+    """Extract (input_tokens, cached_tokens, output_tokens, cost_usd, model_served) from an OpenRouter response."""
+    usage = response.usage
+    if not usage:
+        return 0, 0, 0, 0.0, ""
+    input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    output_tokens = getattr(usage, "completion_tokens", 0) or 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached_tokens = getattr(details, "cached_tokens", 0) or 0
+    extra = getattr(usage, "model_extra", {}) or {}
+    cost_usd = float(extra.get("cost", 0) or 0)
+    model_served = getattr(response, "model", "") or ""
+    return input_tokens, cached_tokens, output_tokens, cost_usd, model_served
 
 
 def _extract_last_paragraph(text: str) -> str:

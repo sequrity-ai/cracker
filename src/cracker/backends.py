@@ -20,8 +20,8 @@ class AgentResponse:
     latency: float
     input_tokens: int = 0
     output_tokens: int = 0
-    reasoning_tokens: int = 0
     cache_read_tokens: int = 0
+    cost_usd: float = 0.0
     error: str | None = None
 
 
@@ -154,6 +154,7 @@ class LocalBackend(Backend):
                         input_tokens=usage.get("input", 0),
                         output_tokens=usage.get("output", 0),
                         cache_read_tokens=usage.get("cacheRead", 0),
+                        cost_usd=float(usage.get("cost", 0) or 0),
                     )
                 except json.JSONDecodeError:
                     return AgentResponse(text=result.stdout, success=True, latency=latency)
@@ -656,6 +657,7 @@ class DaytonaBackend(Backend):
                     input_tokens=usage.get("input", 0),
                     output_tokens=usage.get("output", 0),
                     cache_read_tokens=usage.get("cacheRead", 0),
+                    cost_usd=float(usage.get("cost", 0) or 0),
                 )
 
             except Exception as e:
@@ -749,52 +751,3 @@ class DaytonaBackend(Backend):
 
         logger.info(f"Synced {count} files from {local_path} to sandbox:{self.workspace_path}")
 
-    def validate_daytona(self, validator, response: str, setup_data: dict) -> object:
-        """Download sandbox workspace to a temp dir and run the validator locally."""
-        import os
-        import shutil
-        import tempfile
-
-        temp_dir = tempfile.mkdtemp(prefix="cracker_validate_")
-        try:
-            logger.info(f"Downloading sandbox workspace for validation...")
-            self._download_recursive(self.workspace_path, temp_dir)
-
-            local_setup_data = setup_data.copy()
-            local_setup_data["workspace_dir"] = temp_dir
-            local_setup_data["data_json"] = os.path.join(temp_dir, "data.json")
-            local_setup_data["notes_txt"] = os.path.join(temp_dir, "notes.txt")
-            local_setup_data["reports_dir"] = os.path.join(temp_dir, "reports")
-
-            result = validator(response, local_setup_data)
-            logger.info(f"Validation done: success={getattr(result, 'success', result)}")
-            return result
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def _download_recursive(self, remote_dir: str, local_dir: str) -> None:
-        """Recursively download a directory from the sandbox."""
-        import os
-
-        os.makedirs(local_dir, exist_ok=True)
-        try:
-            items = self._sandbox.fs.list_files(remote_dir)
-        except Exception:
-            return
-
-        for item in items:
-            name = item.name if hasattr(item, "name") else str(item)
-            remote_path = f"{remote_dir}/{name}"
-            local_path = os.path.join(local_dir, name)
-
-            is_dir = item.is_dir if hasattr(item, "is_dir") else False
-            if is_dir:
-                self._download_recursive(remote_path, local_path)
-            else:
-                try:
-                    data = self._sandbox.fs.download_file(remote_path)
-                    if data is not None:
-                        with open(local_path, "wb") as f:
-                            f.write(data)
-                except Exception:
-                    pass

@@ -1,6 +1,6 @@
 """Attack vector implementations for cracker benchmark."""
 
-from cracker.attacks.base import Attack, AttackVector, AttackStrength, ALL_STRENGTHS
+from cracker.attacks.base import Attack, AttackVector
 from cracker.attacks.file import FileAttack
 from cracker.attacks.tool import ToolAttack
 from cracker.attacks.skill import SkillAttack

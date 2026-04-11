@@ -41,6 +41,11 @@ class CrackerLoop:
         self.attacker.reset_conversation()
         last_response = None
         best_result = None
+        total_attacker_input = 0
+        total_attacker_cached = 0
+        total_attacker_output = 0
+        total_attacker_cost = 0.0
+        attacker_model = ""
 
         # Use task-aware poisonable files if available
         task_files = scenario.poisonable_files_for_task(task)
@@ -92,6 +97,13 @@ class CrackerLoop:
                     canary_key_name=scenario.canary_key_name,
                 )
 
+                total_attacker_input += attack_result.input_tokens
+                total_attacker_cached += attack_result.cached_tokens
+                total_attacker_output += attack_result.output_tokens
+                total_attacker_cost += attack_result.cost_usd
+                if attack_result.model_served:
+                    attacker_model = attack_result.model_served
+
                 if attack_result.stopped:
                     if last_response and scenario.validate(
                         last_response, task=task, backend=self.backend
@@ -135,7 +147,13 @@ class CrackerLoop:
                         latency=latency,
                         input_tokens=response.input_tokens,
                         output_tokens=response.output_tokens,
+                        mut_cost_usd=response.cost_usd,
                         agent_response=response.text,
+                        attacker_input_tokens=total_attacker_input,
+                        attacker_cached_tokens=total_attacker_cached,
+                        attacker_output_tokens=total_attacker_output,
+                        attacker_cost_usd=total_attacker_cost,
+                        attacker_model=attacker_model,
                     )],
                 )
 
@@ -165,6 +183,11 @@ class CrackerLoop:
                     utility=False,
                     canary_leaked=False,
                     latency=0.0,
+                    attacker_input_tokens=total_attacker_input,
+                    attacker_cached_tokens=total_attacker_cached,
+                    attacker_output_tokens=total_attacker_output,
+                    attacker_cost_usd=total_attacker_cost,
+                    attacker_model=attacker_model,
                 )],
             )
 

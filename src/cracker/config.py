@@ -70,10 +70,6 @@ class CrackerConfig(BaseModel):
         default_factory=lambda: os.getenv("CRACKER_WORKSPACE", "/tmp/openclaw_benchmark"),
     )
 
-    # Logging
-    verbose: bool = Field(default=False)
-    log_level: str = Field(default="INFO")
-
     def validate_config(self) -> None:
         """Validate required configuration based on backend."""
         # Sequrity models don't need OpenRouter key

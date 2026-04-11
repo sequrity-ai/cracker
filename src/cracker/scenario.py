@@ -47,14 +47,28 @@ class AttemptResult:
     input_tokens: int = 0
     output_tokens: int = 0
     agent_response: str = ""
+    mut_model: str = ""
+    mut_cost_usd: float = 0.0
+    attacker_input_tokens: int = 0
+    attacker_cached_tokens: int = 0
+    attacker_output_tokens: int = 0
+    attacker_cost_usd: float = 0.0
+    attacker_model: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "utility": self.utility,
             "canary_leaked": self.canary_leaked,
             "latency": self.latency,
+            "mut_model": self.mut_model,
+            "mut_cost_usd": round(self.mut_cost_usd, 6),
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "attacker_model": self.attacker_model,
+            "attacker_input_tokens": self.attacker_input_tokens,
+            "attacker_cached_tokens": self.attacker_cached_tokens,
+            "attacker_output_tokens": self.attacker_output_tokens,
+            "attacker_cost_usd": round(self.attacker_cost_usd, 6),
         }
 
 
