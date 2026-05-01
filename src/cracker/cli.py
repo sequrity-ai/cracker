@@ -37,11 +37,16 @@ def _create_backend(config: CrackerConfig):
         raise ValueError(f"Invalid backend: {config.backend}")
 
 
-def setup_logging(verbose: bool = False):
+def setup_logging(verbose: bool = False, log_file: str | None = None):
     level = logging.DEBUG if verbose else logging.INFO
+    handlers = [logging.StreamHandler()]
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file))
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
     )
 
 
@@ -143,7 +148,14 @@ def _run_scenario(cracker, scenario: CrackerScenario, tasks: list, mode: str, ve
 
 def cmd_benchmark(args):
     """Run benchmark (benign + attack modes, vector-agnostic scenarios)."""
-    setup_logging(args.verbose)
+    # Derive log path from output path, or auto-generate from model/timestamp
+    log_file = None
+    if args.output:
+        log_file = str(Path(args.output).with_suffix(".log"))
+    elif args.model:
+        safe_model = args.model.replace("/", "-")
+        log_file = f"output/{safe_model}.log"
+    setup_logging(args.verbose, log_file=log_file)
 
     from cracker.scenarios import ALL_SCENARIOS, get_scenario
 

@@ -69,6 +69,7 @@ class AttemptResult:
             "attacker_cached_tokens": self.attacker_cached_tokens,
             "attacker_output_tokens": self.attacker_output_tokens,
             "attacker_cost_usd": round(self.attacker_cost_usd, 6),
+            "agent_response": self.agent_response,
         }
 
 
