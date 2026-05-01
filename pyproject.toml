@@ -13,6 +13,7 @@ dependencies = [
     "rich>=13.0",  # For pretty terminal output
     "daytona-sdk>=0.1.0",  # For Daytona backend
     "numpy>=2.2.6",
+    "scipy>=1.15.3",
 ]
 
 [project.optional-dependencies]
